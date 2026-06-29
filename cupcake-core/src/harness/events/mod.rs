@@ -5,12 +5,14 @@
 //! but designed for extensibility.
 
 pub mod claude_code;
+pub mod codex;
 pub mod cursor;
 pub mod factory;
 pub mod opencode;
 
 // Re-export commonly used types
 pub use claude_code::{ClaudeCodeEvent, CommonEventData, CompactTrigger, SessionSource};
+pub use codex::{CodexEvent, CommonCodexData};
 pub use cursor::{CommonCursorData, CursorEvent};
 pub use factory::{CommonFactoryData, FactoryEvent, PermissionMode};
 pub use opencode::{CommonOpenCodeData, OpenCodeEvent, ToolResult};

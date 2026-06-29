@@ -77,8 +77,8 @@ pub fn preprocess_input(
     // We copy these strings out of the JSON so we can modify the JSON later.
     // Can't modify data while something points into it.
     let (tool_name, event_name): (String, String) = match harness {
-        HarnessType::ClaudeCode | HarnessType::Factory => {
-            // Claude Code and Factory AI use tool_name (same structure)
+        HarnessType::ClaudeCode | HarnessType::Factory | HarnessType::Codex => {
+            // Claude Code, Factory AI, and Codex use tool_name (same structure)
             let tool = input
                 .get("tool_name")
                 .and_then(|v| v.as_str())
@@ -189,6 +189,7 @@ pub fn preprocess_input(
                 HarnessType::Factory => preprocess_claude_bash_command(input, config),
                 HarnessType::Cursor => preprocess_cursor_shell_command(input, config),
                 HarnessType::OpenCode => preprocess_claude_bash_command(input, config), // Same format as Claude/Factory
+                HarnessType::Codex => preprocess_claude_bash_command(input, config),
             };
             if applied {
                 result.record("whitespace_normalization");
@@ -502,8 +503,8 @@ fn resolve_and_attach_symlinks(input: &mut Value, harness: HarnessType) -> bool 
 
     // Extract file path based on tool and harness type
     let file_path_opt = match harness {
-        HarnessType::ClaudeCode | HarnessType::Factory => {
-            // Claude Code and Factory AI structure: input.tool_input.<field>
+        HarnessType::ClaudeCode | HarnessType::Factory | HarnessType::Codex => {
+            // Claude Code, Factory AI, and Codex structure: input.tool_input.<field>
             input.get("tool_input").and_then(|tool_input| {
                 // Try different field names based on tool type
                 // NOTE: Glob 'pattern' field is intentionally excluded - patterns like

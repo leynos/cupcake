@@ -221,6 +221,7 @@ impl Engine {
             crate::harness::types::HarnessType::Cursor => "cursor",
             crate::harness::types::HarnessType::Factory => "factory",
             crate::harness::types::HarnessType::OpenCode => "opencode",
+            crate::harness::types::HarnessType::Codex => "codex",
         };
         let harness_policies_dir = self.paths.policies.join(harness_subdir);
         info!(
@@ -397,6 +398,7 @@ impl Engine {
             crate::harness::types::HarnessType::Cursor => "cursor",
             crate::harness::types::HarnessType::Factory => "factory",
             crate::harness::types::HarnessType::OpenCode => "opencode",
+            crate::harness::types::HarnessType::Codex => "codex",
         };
         let harness_global_policies_dir = global_policies_path.join(harness_subdir);
 

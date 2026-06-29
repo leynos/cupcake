@@ -26,6 +26,10 @@ pub enum HarnessType {
     /// OpenCode (opencode.ai) - Terminal-based AI coding agent
     #[serde(rename = "opencode")]
     OpenCode,
+
+    /// Codex (OpenAI) - AI coding agent
+    #[serde(rename = "codex")]
+    Codex,
 }
 
 impl HarnessType {
@@ -36,6 +40,7 @@ impl HarnessType {
             HarnessType::Cursor => "cursor",
             HarnessType::Factory => "factory",
             HarnessType::OpenCode => "opencode",
+            HarnessType::Codex => "codex",
         }
     }
 
@@ -46,6 +51,7 @@ impl HarnessType {
             HarnessType::Cursor => "Cursor",
             HarnessType::Factory => "Factory AI",
             HarnessType::OpenCode => "OpenCode",
+            HarnessType::Codex => "Codex",
         }
     }
 
@@ -56,6 +62,7 @@ impl HarnessType {
             HarnessType::Cursor => "cursor",
             HarnessType::Factory => "factory",
             HarnessType::OpenCode => "opencode",
+            HarnessType::Codex => "codex",
         }
     }
 }
@@ -75,8 +82,9 @@ impl std::str::FromStr for HarnessType {
             "cursor" => Ok(HarnessType::Cursor),
             "factory" | "factoryai" | "factory-ai" | "droid" => Ok(HarnessType::Factory),
             "opencode" | "open-code" => Ok(HarnessType::OpenCode),
+            "codex" | "openai-codex" | "openai_codex" => Ok(HarnessType::Codex),
             _ => Err(format!(
-                "Unknown harness type: '{s}'. Valid options: claude, cursor, factory, opencode"
+                "Unknown harness type: '{s}'. Valid options: claude, cursor, factory, opencode, codex"
             )),
         }
     }
@@ -134,6 +142,7 @@ mod tests {
         assert_eq!(HarnessType::Cursor.policy_dir(), "cursor");
         assert_eq!(HarnessType::Factory.policy_dir(), "factory");
         assert_eq!(HarnessType::OpenCode.policy_dir(), "opencode");
+        assert_eq!(HarnessType::Codex.policy_dir(), "codex");
     }
 
     #[test]
@@ -152,5 +161,18 @@ mod tests {
         );
         assert_eq!(HarnessType::OpenCode.to_string(), "opencode");
         assert_eq!(HarnessType::OpenCode.display_name(), "OpenCode");
+    }
+
+    #[test]
+    fn test_codex_parsing() {
+        assert_eq!("codex".parse::<HarnessType>().unwrap(), HarnessType::Codex);
+        assert_eq!(
+            "openai-codex".parse::<HarnessType>().unwrap(),
+            HarnessType::Codex
+        );
+        assert_eq!("CODEX".parse::<HarnessType>().unwrap(), HarnessType::Codex);
+        assert_eq!(HarnessType::Codex.to_string(), "codex");
+        assert_eq!(HarnessType::Codex.display_name(), "Codex");
+        assert_eq!(HarnessType::Codex.policy_dir(), "codex");
     }
 }

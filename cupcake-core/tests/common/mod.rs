@@ -52,6 +52,7 @@ pub fn create_test_project_for_harness(project_path: &Path, harness: HarnessType
         HarnessType::Cursor => "cursor",
         HarnessType::Factory => "factory",
         HarnessType::OpenCode => "opencode",
+        HarnessType::Codex => "codex",
     };
     let harness_dir = policies_dir.join(harness_name);
     let system_dir = harness_dir.join("system");
