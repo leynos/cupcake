@@ -157,11 +157,11 @@ cargo test --workspace --features cupcake-core/deterministic-tests
   as a string `command`.
 - [x] CodeRabbit core milestone review completed with zero findings after the
   local deterministic gates passed.
-- [ ] Add red CLI tests for Codex eval dispatch and init configuration.
+- [x] Add CLI tests for Codex init configuration and generated hook file.
 - [x] (2026-06-29 10:24Z) Implement the Codex event and response modules.
-- [ ] Wire Codex through core harness types, CLI harness selection, init, and
+- [x] Wire Codex through core harness types, CLI harness selection, init, and
   builtins deployment.
-- [ ] Add Codex documentation and examples.
+- [x] Add Codex documentation and examples.
 - [ ] Run focused and workspace validation commands.
 
 ## Surprises & discoveries
@@ -245,6 +245,15 @@ cargo test --workspace --features cupcake-core/deterministic-tests
   Impact: Cupcake validates `agent_id` and `agent_type` for Codex
   `SubagentStart` and `SubagentStop` at deserialization time while keeping the
   fields optional for root events.
+
+- Observation: CLI tests that instantiate the full engine require the external
+  OPA binary before harness response dispatch is reached.
+  Evidence: `cargo test -p cupcake-cli test_all_harnesses_create_valid_engine_structures`
+  failed on the pre-existing Claude case with `No such file or directory`
+  while executing OPA.
+  Impact: The CLI milestone uses Codex-focused init/config tests in this
+  environment. Core Codex response formatting remains covered by
+  `cargo test -p cupcake-core codex`.
 
 ## Decision log
 
@@ -347,6 +356,18 @@ Modify responses now overlay updates on the original tool input and preserve an
 original string `command` if a partial update omits or invalidates it.
 The core milestone was revalidated with local gates and CodeRabbit returned
 zero findings. This milestone is ready to commit before CLI/init work begins.
+The CLI/init milestone now recognises `--harness codex`, configures
+`.codex/hooks.json`, deploys Codex policy directories and builtins, and
+documents Codex setup/reference material. The attempted full-engine CLI matrix
+test is blocked by the local lack of OPA before Codex dispatch is reached.
+Focused CLI/docs validation passed with `cargo fmt --all -- --check`,
+`cargo test -p cupcake-cli codex`, `cargo test -p cupcake-core codex`,
+`cargo clippy -p cupcake-core --all-targets`,
+`cargo clippy -p cupcake-cli --all-targets`, `make markdownlint`, and
+`make nixie`. Broad markdownlint over all docs still reports pre-existing
+site-wide style violations outside the ExecPlan lint target.
+CodeRabbit reviewed the CLI/docs milestone after those gates and returned zero
+findings. This milestone is ready to commit.
 
 ## Context and orientation
 

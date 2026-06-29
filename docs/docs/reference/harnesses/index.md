@@ -15,18 +15,21 @@ Cupcake supports multiple AI coding agents (harnesses). Each harness has differe
 | [Cursor](cursor.md)           | External hooks (stdin/stdout) | No                | Limited           |
 | [OpenCode](opencode.md)       | In-process TypeScript plugin  | Limited           | Converted to deny |
 | [Factory AI](factory-ai.md)   | External hooks (stdin/stdout) | Yes               | Full              |
+| [OpenAI Codex](codex.md)      | External hooks (stdin/stdout) | Yes               | Full              |
 
 ## Quick Comparison
 
 ### Event Models
 
-| Feature               | Claude Code                  | Cursor                                                         | Factory AI                   | OpenCode      |
-| --------------------- | ---------------------------- | -------------------------------------------------------------- | ---------------------------- | ------------- |
-| Pre-execution events  | `PreToolUse`                 | `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile` | `PreToolUse`                 | `PreToolUse`  |
-| Post-execution events | `PostToolUse`                | `afterFileEdit`                                                | `PostToolUse`                | `PostToolUse` |
-| Prompt events         | `UserPromptSubmit`           | `beforeSubmitPrompt`                                           | `UserPromptSubmit`           | -             |
-| Session events        | `SessionStart`, `SessionEnd` | `stop`                                                         | `SessionStart`, `SessionEnd` | -             |
-| Compaction            | `PreCompact`                 | -                                                              | `PreCompact`                 | -             |
+| Feature               | Claude Code                  | Cursor                                                         | Factory AI                   | Codex                         | OpenCode      |
+| --------------------- | ---------------------------- | -------------------------------------------------------------- | ---------------------------- | ----------------------------- | ------------- |
+| Pre-execution events  | `PreToolUse`                 | `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile` | `PreToolUse`                 | `PreToolUse`                  | `PreToolUse`  |
+| Approval events       | -                            | -                                                              | -                            | `PermissionRequest`           | -             |
+| Post-execution events | `PostToolUse`                | `afterFileEdit`                                                | `PostToolUse`                | `PostToolUse`                 | `PostToolUse` |
+| Prompt events         | `UserPromptSubmit`           | `beforeSubmitPrompt`                                           | `UserPromptSubmit`           | `UserPromptSubmit`            | -             |
+| Session events        | `SessionStart`, `SessionEnd` | `stop`                                                         | `SessionStart`, `SessionEnd` | `SessionStart`, `Stop`        | -             |
+| Subagent events       | -                            | -                                                              | -                            | `SubagentStart`, `SubagentStop` | -           |
+| Compaction            | `PreCompact`                 | -                                                              | `PreCompact`                 | `PreCompact`, `PostCompact`   | -             |
 
 ### Response Formats
 
@@ -35,6 +38,7 @@ Cupcake supports multiple AI coding agents (harnesses). Each harness has differe
 | Claude Code | `permissionDecision: "allow"` | `permissionDecision: "deny"` | `permissionDecision: "ask"`      |
 | Cursor      | `permission: "allow"`         | `permission: "deny"`         | `permission: "ask"`              |
 | Factory AI  | `permissionDecision: "allow"` | `permissionDecision: "deny"` | `permissionDecision: "ask"`      |
+| Codex       | `permissionDecision: "allow"` | `permissionDecision: "deny"` | `permissionDecision: "ask"`      |
 | OpenCode    | `decision: "allow"`           | `decision: "deny"`           | `decision: "deny"` (with reason) |
 
 ### Field Naming Conventions
@@ -44,6 +48,7 @@ Cupcake supports multiple AI coding agents (harnesses). Each harness has differe
 | Claude Code | `hook_event_name` | snake_case  |
 | Cursor      | `hook_event_name` | snake_case  |
 | Factory AI  | `hookEventName`   | camelCase   |
+| Codex       | `hook_event_name` | snake_case  |
 | OpenCode    | `hook_event_name` | snake_case  |
 
 ## Policy Portability
@@ -51,6 +56,7 @@ Cupcake supports multiple AI coding agents (harnesses). Each harness has differe
 Policies can be shared across harnesses with some considerations:
 
 - **Claude Code <-> Factory AI**: Most policies are directly portable (same event names, similar structure)
+- **Codex**: Many Claude-style tool policies are portable, but `PermissionRequest` has a distinct response model
 - **Cursor**: Different event names require separate policy files or conditional logic
 - **OpenCode**: Simpler event model (PreToolUse/PostToolUse only)
 

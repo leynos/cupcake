@@ -46,10 +46,11 @@ Cupcake provides native integrations for multiple AI coding agents:
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ | ---------------------------------------------------- |
 | <img src="../../assets/claude-light.svg#only-light" alt="Claude Code" width="90"><img src="../../assets/claude-dark.svg#only-dark" width="90" aria-hidden="true">                    | :lucide-check: Fully Supported | [Setup Guide](/getting-started/usage/claude-code.md) |
 | <img src="../../assets/cursor-light.svg#only-light" alt="Cursor" width="90"><img src="../../assets/cursor-dark.svg#only-dark" width="90" aria-hidden="true">                         | :lucide-check: Fully Supported | [Setup Guide](/getting-started/usage/cursor.md)      |
+| OpenAI Codex                                                                                                                                                                        | :lucide-check: Fully Supported | [Setup Guide](/getting-started/usage/codex.md)       |
 | <img src="../../assets/opencode-wordmark-light.svg#only-light" alt="OpenCode" width="90"><img src="../../assets/opencode-wordmark-dark.svg#only-dark" width="90" aria-hidden="true"> | :lucide-check: Fully Supported | [Setup Guide](/getting-started/usage/opencode.md)    |
 | <img src="../../assets/factory-light.svg#only-light" alt="Factory AI" width="100"><img src="../../assets/factory-dark.svg#only-dark" width="100" aria-hidden="true">                 | :lucide-check: Fully Supported | [Setup Guide](/getting-started/usage/factory-ai.md)  |
 
-Each harness uses native event formats—no normalization layer. Policies are physically separated by harness (`policies/claude/`, `policies/cursor/`) to ensure clarity and full access to harness-specific capabilities.
+Each harness uses native event formats—no normalization layer. Policies are physically separated by harness (`policies/claude/`, `policies/cursor/`, `policies/factory/`, `policies/codex/`, `policies/opencode/`) to ensure clarity and full access to harness-specific capabilities.
 
 ## Language Bindings
 
@@ -63,7 +64,7 @@ Cupcake can be embedded in JavaScript agent applications through native bindings
 
 Modern AI agents are powerful but inconsistent at following operational and security rules, especially as context grows. Cupcake turns the rules you already maintain (e.g., `CLAUDE.md`, `AGENT.md`, `.cursor/rules`) into enforceable guardrails that run before actions execute.
 
-- **Multi-harness support** with first-class integrations for Claude Code and Cursor
+- **Multi-harness support** with first-class integrations for Claude Code, Cursor, Factory AI, OpenAI Codex, and OpenCode
 - **Governance-as-code** using OPA/Rego compiled to WebAssembly for fast, sandboxed evaluation
 - **Enterprise-ready controls:** allow/deny/review, audit trails, and proactive warnings
 

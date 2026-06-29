@@ -629,6 +629,45 @@ fn test_init_factory_creates_factory_only() -> Result<()> {
     Ok(())
 }
 
+/// Test that Codex harness creates correct structure
+#[test]
+fn test_init_codex_creates_codex_only() -> Result<()> {
+    let (_temp_dir, project_path) = run_init_with_harness("codex")?;
+    let cupcake_dir = project_path.join(".cupcake");
+
+    // Shared directories at root should exist
+    assert!(cupcake_dir.join("system").exists());
+    assert!(!cupcake_dir.join("helpers").exists());
+
+    // Codex harness builtins directory should exist
+    assert!(cupcake_dir.join("policies/codex/builtins").exists());
+
+    // Other harness directories should NOT exist
+    assert!(
+        !cupcake_dir.join("policies/claude").exists(),
+        "Claude directory should NOT exist when initializing with Codex"
+    );
+    assert!(
+        !cupcake_dir.join("policies/cursor").exists(),
+        "Cursor directory should NOT exist when initializing with Codex"
+    );
+    assert!(
+        !cupcake_dir.join("policies/factory").exists(),
+        "Factory directory should NOT exist when initializing with Codex"
+    );
+    assert!(
+        !cupcake_dir.join("policies/opencode").exists(),
+        "OpenCode directory should NOT exist when initializing with Codex"
+    );
+
+    // Codex should have 7 builtins (same compatible surface as Claude)
+    let builtins_dir = cupcake_dir.join("policies/codex/builtins");
+    let builtin_count = fs::read_dir(&builtins_dir)?.count();
+    assert_eq!(builtin_count, 7, "Codex should have 7 builtins");
+
+    Ok(())
+}
+
 /// Test adding a second harness to an existing project
 #[test]
 fn test_init_can_add_second_harness() -> Result<()> {
@@ -769,6 +808,7 @@ async fn test_all_harnesses_create_valid_engine_structures() -> Result<()> {
             "factory",
             cupcake_core::harness::types::HarnessType::Factory,
         ),
+        ("codex", cupcake_core::harness::types::HarnessType::Codex),
         (
             "opencode",
             cupcake_core::harness::types::HarnessType::OpenCode,

@@ -34,6 +34,9 @@ pub struct CursorHarness;
 /// Factory AI harness implementation
 pub struct FactoryHarness;
 
+/// OpenAI Codex harness implementation
+pub struct CodexHarness;
+
 /// OpenCode harness implementation
 pub struct OpenCodeHarness;
 
@@ -244,6 +247,100 @@ impl HarnessConfig for FactoryHarness {
                     "hooks": [{
                         "type": "command",
                         "command": format!("cupcake eval --harness factory --policy-dir {}", policy_path)
+                    }]
+                }]
+            }
+        }))
+    }
+
+    fn merge_settings(&self, mut existing: Value, new_hooks: Value) -> Result<Value> {
+        merge_hooks(&mut existing, new_hooks)?;
+        Ok(existing)
+    }
+}
+
+impl HarnessConfig for CodexHarness {
+    fn name(&self) -> &str {
+        "Codex"
+    }
+
+    fn settings_path(&self, global: bool) -> PathBuf {
+        if global {
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("~"))
+                .join(".codex")
+                .join("hooks.json")
+        } else {
+            Path::new(".codex").join("hooks.json")
+        }
+    }
+
+    fn generate_hooks(&self, policy_dir: &Path, global: bool) -> Result<Value> {
+        let policy_path = if global {
+            let abs_path =
+                fs::canonicalize(policy_dir).unwrap_or_else(|_| policy_dir.to_path_buf());
+            abs_path.display().to_string()
+        } else {
+            ".cupcake".to_string()
+        };
+        let command = format!("cupcake eval --harness codex --policy-dir {policy_path}");
+
+        Ok(json!({
+            "hooks": {
+                "PreToolUse": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": command,
+                        "statusMessage": "running Cupcake PreToolUse policy"
+                    }]
+                }],
+                "PermissionRequest": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": command,
+                        "statusMessage": "running Cupcake PermissionRequest policy"
+                    }]
+                }],
+                "PostToolUse": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": command,
+                        "statusMessage": "running Cupcake PostToolUse policy"
+                    }]
+                }],
+                "UserPromptSubmit": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": command,
+                        "statusMessage": "running Cupcake prompt policy"
+                    }]
+                }],
+                "SessionStart": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": command,
+                        "statusMessage": "running Cupcake session policy"
+                    }]
+                }],
+                "Stop": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": command,
+                        "statusMessage": "running Cupcake stop policy"
+                    }]
+                }],
+                "SubagentStart": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": command,
+                        "statusMessage": "running Cupcake subagent start policy"
+                    }]
+                }],
+                "SubagentStop": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": command,
+                        "statusMessage": "running Cupcake subagent stop policy"
                     }]
                 }]
             }
@@ -570,6 +667,36 @@ pub async fn configure_harness(
                     harness.name());
             }
         }
+        HarnessType::Codex => {
+            let harness = CodexHarness;
+            let settings_path = harness.settings_path(global);
+
+            if let Err(e) =
+                setup_harness_settings(&harness, &settings_path, policy_dir, global).await
+            {
+                eprintln!(
+                    "⚠️  Could not automatically configure {}: {}",
+                    harness.name(),
+                    e
+                );
+                print_codex_manual_instructions(policy_dir, global);
+            } else {
+                println!(
+                    "✅ Configured {} integration in {}",
+                    harness.name(),
+                    settings_path.display()
+                );
+                println!("   - Added PreToolUse hook for tool approval and modification");
+                println!("   - Added PermissionRequest hook for Codex approval flow");
+                println!("   - Added PostToolUse hook for post-tool validation");
+                println!("   - Added prompt, session, stop, and subagent lifecycle hooks");
+                println!();
+                println!(
+                    "   {} will now evaluate Codex hook events against your Cupcake policies.",
+                    harness.name()
+                );
+            }
+        }
         HarnessType::OpenCode => {
             // OpenCode uses a plugin model - download the plugin from GitHub releases
             println!("   Configuring OpenCode integration...");
@@ -723,6 +850,45 @@ fn print_cursor_manual_instructions(policy_dir: &Path, global: bool) {
     eprintln!("       }}],");
     eprintln!("       \"stop\": [{{");
     eprintln!("         \"command\": \"cupcake eval --harness cursor --policy-dir {policy_path}\"");
+    eprintln!("       }}]");
+    eprintln!("     }}");
+    eprintln!("   }}");
+    eprintln!();
+}
+
+/// Print manual configuration instructions for Codex
+fn print_codex_manual_instructions(policy_dir: &Path, global: bool) {
+    let policy_path = if global {
+        policy_dir.display().to_string()
+    } else {
+        ".cupcake".to_string()
+    };
+    let settings_path = if global {
+        "~/.codex/hooks.json"
+    } else {
+        ".codex/hooks.json"
+    };
+
+    eprintln!();
+    eprintln!("   To manually configure, add this to your {settings_path}:");
+    eprintln!();
+    eprintln!("   {{");
+    eprintln!("     \"hooks\": {{");
+    eprintln!("       \"PreToolUse\": [{{");
+    eprintln!("         \"hooks\": [{{");
+    eprintln!("           \"type\": \"command\",");
+    eprintln!(
+        "           \"command\": \"cupcake eval --harness codex --policy-dir {policy_path}\""
+    );
+    eprintln!("         }}]");
+    eprintln!("       }}],");
+    eprintln!("       \"PermissionRequest\": [{{");
+    eprintln!("         \"hooks\": [{{");
+    eprintln!("           \"type\": \"command\",");
+    eprintln!(
+        "           \"command\": \"cupcake eval --harness codex --policy-dir {policy_path}\""
+    );
+    eprintln!("         }}]");
     eprintln!("       }}]");
     eprintln!("     }}");
     eprintln!("   }}");

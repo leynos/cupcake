@@ -251,6 +251,8 @@ enum HarnessType {
     Cursor,
     /// Factory AI Droid (factory.ai)
     Factory,
+    /// OpenAI Codex
+    Codex,
     /// OpenCode (opencode.ai)
     #[clap(name = "opencode")]
     OpenCode,
@@ -262,6 +264,7 @@ impl From<HarnessType> for cupcake_core::harness::types::HarnessType {
             HarnessType::Claude => cupcake_core::harness::types::HarnessType::ClaudeCode,
             HarnessType::Cursor => cupcake_core::harness::types::HarnessType::Cursor,
             HarnessType::Factory => cupcake_core::harness::types::HarnessType::Factory,
+            HarnessType::Codex => cupcake_core::harness::types::HarnessType::Codex,
             HarnessType::OpenCode => cupcake_core::harness::types::HarnessType::OpenCode,
         }
     }
@@ -273,6 +276,7 @@ fn harness_dir_name(harness: &HarnessType) -> &'static str {
         HarnessType::Claude => "claude",
         HarnessType::Cursor => "cursor",
         HarnessType::Factory => "factory",
+        HarnessType::Codex => "codex",
         HarnessType::OpenCode => "opencode",
     }
 }
@@ -284,9 +288,10 @@ fn prompt_harness_selection() -> Result<HarnessType> {
     println!("  1) claude   - Claude Code (claude.ai/code)");
     println!("  2) cursor   - Cursor (cursor.com)");
     println!("  3) factory  - Factory AI Droid (factory.ai)");
-    println!("  4) opencode - OpenCode (opencode.ai)");
+    println!("  4) codex    - OpenAI Codex");
+    println!("  5) opencode - OpenCode (opencode.ai)");
     println!();
-    print!("Enter choice [1-4]: ");
+    print!("Enter choice [1-5]: ");
     io::stdout().flush()?;
 
     let mut input = String::new();
@@ -296,9 +301,10 @@ fn prompt_harness_selection() -> Result<HarnessType> {
         "1" | "claude" => Ok(HarnessType::Claude),
         "2" | "cursor" => Ok(HarnessType::Cursor),
         "3" | "factory" => Ok(HarnessType::Factory),
-        "4" | "opencode" => Ok(HarnessType::OpenCode),
+        "4" | "codex" => Ok(HarnessType::Codex),
+        "5" | "opencode" => Ok(HarnessType::OpenCode),
         _ => Err(anyhow!(
-            "Invalid selection '{}'. Please enter 1-4 or a harness name (claude, cursor, factory, opencode)",
+            "Invalid selection '{}'. Please enter 1-5 or a harness name (claude, cursor, factory, codex, opencode)",
             input.trim()
         )),
     }
@@ -584,6 +590,10 @@ async fn eval_command(
             let event =
                 serde_json::from_str::<harness::events::factory::FactoryEvent>(&stdin_buffer)?;
             harness::FactoryHarness::format_response(&event, &decision)?
+        }
+        cupcake_core::harness::types::HarnessType::Codex => {
+            let event = serde_json::from_str::<harness::events::codex::CodexEvent>(&stdin_buffer)?;
+            harness::CodexHarness::format_response(&event, &decision)?
         }
         cupcake_core::harness::types::HarnessType::OpenCode => {
             let event =
@@ -1002,6 +1012,14 @@ collect_verbs(verb_name) := result if {
 "#,
     )?;
 
+    // Codex system evaluate
+    let codex_system_dir = global_paths.policies.join("codex").join("system");
+    fs::create_dir_all(&codex_system_dir)?;
+    fs::copy(
+        claude_system_dir.join("evaluate.rego"),
+        codex_system_dir.join("evaluate.rego"),
+    )?;
+
     // Create an example global policy
     fs::write(
         global_paths.policies.join("example_global.rego"),
@@ -1051,9 +1069,11 @@ import rego.v1
     // Create harness-specific builtin directories for global builtin policies
     let claude_builtins_dir = global_paths.policies.join("claude").join("builtins");
     let cursor_builtins_dir = global_paths.policies.join("cursor").join("builtins");
+    let codex_builtins_dir = global_paths.policies.join("codex").join("builtins");
     let helpers_dir = global_paths.policies.join("helpers");
     fs::create_dir_all(&claude_builtins_dir)?;
     fs::create_dir_all(&cursor_builtins_dir)?;
+    fs::create_dir_all(&codex_builtins_dir)?;
     fs::create_dir_all(&helpers_dir)?;
 
     // Write helper library (shared by both harnesses)
@@ -1097,6 +1117,26 @@ import rego.v1
 
     for (filename, content) in cursor_global_builtins {
         fs::write(cursor_builtins_dir.join(filename), content)?;
+    }
+
+    // Deploy Codex global builtin policies
+    let codex_global_builtins = vec![
+        (
+            "system_protection.rego",
+            CLAUDE_GLOBAL_SYSTEM_PROTECTION_POLICY,
+        ),
+        (
+            "sensitive_data_protection.rego",
+            CLAUDE_GLOBAL_SENSITIVE_DATA_POLICY,
+        ),
+        (
+            "cupcake_exec_protection.rego",
+            CLAUDE_GLOBAL_CUPCAKE_EXEC_POLICY,
+        ),
+    ];
+
+    for (filename, content) in codex_global_builtins {
+        fs::write(codex_builtins_dir.join(filename), content)?;
     }
 
     // Deploy Factory AI global builtin policies
@@ -1341,6 +1381,27 @@ fn deploy_harness_builtins(harness: &HarnessType, harness_name: &str) -> Result<
             (
                 "factory_enforce_full_file_read.rego",
                 FACTORY_ENFORCE_FULL_FILE_READ_POLICY,
+            ),
+        ],
+        HarnessType::Codex => vec![
+            (
+                "codex_always_inject_on_prompt.rego",
+                CLAUDE_ALWAYS_INJECT_POLICY,
+            ),
+            ("git_pre_check.rego", CLAUDE_GIT_PRE_CHECK_POLICY),
+            ("post_edit_check.rego", CLAUDE_POST_EDIT_CHECK_POLICY),
+            (
+                "rulebook_security_guardrails.rego",
+                CLAUDE_RULEBOOK_SECURITY_POLICY,
+            ),
+            ("protected_paths.rego", CLAUDE_PROTECTED_PATHS_POLICY),
+            (
+                "git_block_no_verify.rego",
+                CLAUDE_GIT_BLOCK_NO_VERIFY_POLICY,
+            ),
+            (
+                "codex_enforce_full_file_read.rego",
+                CLAUDE_ENFORCE_FULL_FILE_READ_POLICY,
             ),
         ],
         HarnessType::OpenCode => vec![

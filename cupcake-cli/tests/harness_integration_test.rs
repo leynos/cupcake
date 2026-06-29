@@ -297,6 +297,41 @@ fn test_cursor_global_init_creates_user_level_hooks() {
     );
 }
 
+/// Test that Codex project init creates .codex/hooks.json in project directory
+#[test]
+fn test_codex_init_creates_project_level_hooks() {
+    let temp_dir = TempDir::new().unwrap();
+    let output = run_init(temp_dir.path(), &["init", "--harness", "codex"]);
+    assert!(
+        output.status.success(),
+        "Init failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let hooks_path = temp_dir.path().join(".codex/hooks.json");
+    assert!(
+        hooks_path.exists(),
+        "Project init should create .codex/hooks.json"
+    );
+
+    let hooks_content = fs::read_to_string(&hooks_path).unwrap();
+    let hooks: Value = serde_json::from_str(&hooks_content).unwrap();
+    assert!(hooks["hooks"]["PreToolUse"].is_array());
+    assert!(hooks["hooks"]["PermissionRequest"].is_array());
+    assert!(hooks["hooks"]["PostToolUse"].is_array());
+    assert!(hooks["hooks"]["UserPromptSubmit"].is_array());
+    assert!(hooks["hooks"]["SessionStart"].is_array());
+    assert!(hooks["hooks"]["Stop"].is_array());
+    assert!(hooks["hooks"]["SubagentStart"].is_array());
+    assert!(hooks["hooks"]["SubagentStop"].is_array());
+
+    let command = hooks["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        .as_str()
+        .unwrap();
+    assert!(command.contains("cupcake eval --harness codex"));
+    assert!(command.contains("--policy-dir .cupcake"));
+}
+
 // ============================================================================
 // New Cursor Lifecycle Event Tests
 // ============================================================================

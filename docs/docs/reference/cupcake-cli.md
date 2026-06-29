@@ -73,6 +73,7 @@ Cupcake integrates with multiple AI coding agents via the `--harness` flag:
 | `claude`   | Claude Code (claude.ai/code)  |
 | `cursor`   | Cursor (cursor.com)           |
 | `factory`  | Factory AI Droid (factory.ai) |
+| `codex`    | OpenAI Codex                  |
 | `opencode` | OpenCode (opencode.ai)        |
 
 ## Next Steps
