@@ -486,7 +486,32 @@ mod codex_tests {
     }
 
     #[test]
-    fn formats_codex_pre_tool_use_ask_response() {
+    fn formats_codex_pre_tool_use_allow_response_as_empty_passthrough() {
+        let event = CodexHarness::parse_event(
+            r#"{
+                "session_id": "thread-1",
+                "turn_id": "turn-1",
+                "transcript_path": null,
+                "cwd": "/tmp/project",
+                "hook_event_name": "PreToolUse",
+                "model": "gpt-5-codex",
+                "permission_mode": "default",
+                "tool_name": "Bash",
+                "tool_input": {"command": "git status"},
+                "tool_use_id": "call-1"
+            }"#,
+        )
+        .expect("parse Codex event");
+        let decision = FinalDecision::Allow { context: vec![] };
+
+        let response =
+            CodexHarness::format_response(&event, &decision).expect("format Codex response");
+
+        assert_eq!(response, json!({}));
+    }
+
+    #[test]
+    fn formats_codex_pre_tool_use_ask_response_as_empty_passthrough() {
         let event = CodexHarness::parse_event(
             r#"{
                 "session_id": "thread-1",
@@ -510,13 +535,39 @@ mod codex_tests {
         let response =
             CodexHarness::format_response(&event, &decision).expect("format Codex response");
 
+        assert_eq!(response, json!({}));
+    }
+
+    #[test]
+    fn formats_codex_pre_tool_use_context_without_allow_verdict() {
+        let event = CodexHarness::parse_event(
+            r#"{
+                "session_id": "thread-1",
+                "turn_id": "turn-1",
+                "transcript_path": null,
+                "cwd": "/tmp/project",
+                "hook_event_name": "PreToolUse",
+                "model": "gpt-5-codex",
+                "permission_mode": "default",
+                "tool_name": "Bash",
+                "tool_input": {"command": "git status"},
+                "tool_use_id": "call-1"
+            }"#,
+        )
+        .expect("parse Codex event");
+        let decision = FinalDecision::Allow {
+            context: vec!["remember this".to_string()],
+        };
+
+        let response =
+            CodexHarness::format_response(&event, &decision).expect("format Codex response");
+
         assert_eq!(
             response,
             json!({
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
-                    "permissionDecision": "ask",
-                    "permissionDecisionReason": "confirm this command"
+                    "additionalContext": "remember this"
                 }
             })
         );

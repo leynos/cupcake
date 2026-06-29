@@ -56,11 +56,7 @@ fn build_pre_tool_use(event: &CodexEvent, decision: &FinalDecision) -> Value {
             "permissionDecision": "deny",
             "permissionDecisionReason": reason,
         }),
-        PreToolUseOutcome::Ask { reason } => json!({
-            "hookEventName": event_name,
-            "permissionDecision": "ask",
-            "permissionDecisionReason": reason,
-        }),
+        PreToolUseOutcome::Ask => return json!({}),
         PreToolUseOutcome::Modify {
             reason,
             updated_input,
@@ -72,13 +68,9 @@ fn build_pre_tool_use(event: &CodexEvent, decision: &FinalDecision) -> Value {
         }),
         PreToolUseOutcome::AllowWithContext { context } => json!({
             "hookEventName": event_name,
-            "permissionDecision": "allow",
             "additionalContext": context,
         }),
-        PreToolUseOutcome::Allow => json!({
-            "hookEventName": event_name,
-            "permissionDecision": "allow",
-        }),
+        PreToolUseOutcome::Allow => return json!({}),
     };
 
     hook_output(payload)
@@ -207,9 +199,7 @@ enum PreToolUseOutcome<'a> {
     Deny {
         reason: &'a str,
     },
-    Ask {
-        reason: &'a str,
-    },
+    Ask,
     Modify {
         reason: &'a str,
         updated_input: &'a Value,
@@ -225,8 +215,8 @@ fn pre_tool_use_outcome(decision: &FinalDecision) -> PreToolUseOutcome<'_> {
         return PreToolUseOutcome::Deny { reason };
     }
 
-    if let Some(reason) = ask_reason(decision) {
-        return PreToolUseOutcome::Ask { reason };
+    if ask_reason(decision).is_some() {
+        return PreToolUseOutcome::Ask;
     }
 
     if let Some((reason, updated_input)) = modification(decision) {

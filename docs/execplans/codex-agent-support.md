@@ -170,6 +170,11 @@ cargo test --workspace --features cupcake-core/deterministic-tests
   compilation, taught `ProjectPaths` to accept direct Cupcake config roots
   such as `~/.config/cupcake`, and verified the patched binary returns a Codex
   allow response for the global hook command.
+- [x] (2026-06-29 22:00Z) Investigated live Codex `PreToolUse` failures in
+  `/data/leynos/Projects/dakar`. Reproduced the unsupported
+  `permissionDecision:allow` path against local Codex tests and changed no-op
+  Codex `PreToolUse` responses to emit `{}` while preserving explicit
+  `permissionDecision:"allow"` only for `updatedInput` modifications.
 
 ## Surprises & discoveries
 
@@ -274,6 +279,19 @@ cargo test --workspace --features cupcake-core/deterministic-tests
   `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}`.
   Impact: Direct Cupcake config roots must be accepted as active policy roots,
   and the direct root must not be loaded a second time as global config.
+
+- Observation: Codex's `PreToolUse` parser treats plain
+  `permissionDecision:"allow"` and `permissionDecision:"ask"` as unsupported,
+  even though the wire enum includes those values.
+  Evidence: `../codex/codex-rs/hooks/src/events/pre_tool_use.rs` has tests
+  named `permission_decision_allow_without_updated_input_fails_open` and
+  `unsupported_permission_decision_fails_open`, expecting failures for those
+  exact outputs. Live Codex in `/data/leynos/Projects/dakar` reported
+  `PreToolUse hook returned unsupported permissionDecision:allow`.
+  Impact: Cupcake must emit `{}` for no-op `Allow` and `Ask` decisions on
+  Codex `PreToolUse`. `permissionDecision:"allow"` remains valid only when
+  paired with `updatedInput` for `Modify`; additional context is emitted
+  without an allow verdict.
 
 ## Decision log
 
@@ -400,6 +418,10 @@ as a Cupcake config root. The resolver now recognises direct config roots by
 their `policies/` directory and suppresses duplicate global loading when the
 direct root is the configured global root. Focused resolver tests and a patched
 binary repro of the generated global Codex hook command passed.
+Subsequent live testing in `/data/leynos/Projects/dakar` found Codex rejects
+plain `PreToolUse` allow verdicts. Codex no-op `PreToolUse` allow and ask
+decisions now return `{}`, context returns only `additionalContext`, and
+modify still returns `permissionDecision:"allow"` with `updatedInput`.
 
 ## Context and orientation
 
