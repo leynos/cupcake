@@ -91,6 +91,12 @@ impl ProjectPaths {
                 .ok_or_else(|| anyhow!(".cupcake directory has no parent"))?
                 .to_path_buf();
             (root, input)
+        } else if input.join("policies").is_dir() {
+            // Input is a direct Cupcake config root. This covers global
+            // configuration directories such as ~/.config/cupcake, which use
+            // the same layout as .cupcake/ but not the same directory name.
+            let root = input.parent().unwrap_or(&input).to_path_buf();
+            (root, input)
         } else if input.join(".cupcake").exists() {
             // Input is project root with .cupcake/ subdirectory
             let cupcake_dir = input.join(".cupcake");
@@ -113,13 +119,21 @@ impl ProjectPaths {
         // Extract global paths if config exists
         let (global_root, global_policies, global_signals, global_rulebook) =
             if let Some(global) = global_config {
-                info!("Global configuration discovered at {:?}", global.root);
-                (
-                    Some(global.root),
-                    Some(global.policies),
-                    Some(global.signals),
-                    Some(global.rulebook),
-                )
+                if global.root == cupcake_dir {
+                    debug!(
+                        "Input path is the global configuration root; \
+                    using it as the active policy root"
+                    );
+                    (None, None, None, None)
+                } else {
+                    info!("Global configuration discovered at {:?}", global.root);
+                    (
+                        Some(global.root),
+                        Some(global.policies),
+                        Some(global.signals),
+                        Some(global.rulebook),
+                    )
+                }
             } else {
                 debug!("No global configuration found - using project config only");
                 (None, None, None, None)
@@ -200,5 +214,42 @@ impl EngineConfig {
             global_config: None,
             debug_routing: false,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ProjectPaths;
+    use tempfile::TempDir;
+
+    #[test]
+    fn resolves_direct_cupcake_config_root() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_root = temp_dir.path().join("cupcake");
+        std::fs::create_dir_all(config_root.join("policies/codex")).unwrap();
+
+        let paths = ProjectPaths::resolve_with_config(&config_root, None).unwrap();
+
+        assert_eq!(paths.root, temp_dir.path());
+        assert_eq!(paths.cupcake_dir, config_root);
+        assert_eq!(paths.policies, paths.cupcake_dir.join("policies"));
+    }
+
+    #[test]
+    fn direct_global_config_root_is_not_loaded_twice() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_root = temp_dir.path().join("cupcake");
+        std::fs::create_dir_all(config_root.join("policies/codex")).unwrap();
+        std::fs::write(config_root.join("rulebook.yml"), "signals: {}\n").unwrap();
+        let config_root = config_root.canonicalize().unwrap();
+
+        let paths =
+            ProjectPaths::resolve_with_config(&config_root, Some(config_root.clone())).unwrap();
+
+        assert_eq!(paths.cupcake_dir, config_root);
+        assert_eq!(paths.global_root, None);
+        assert_eq!(paths.global_policies, None);
+        assert_eq!(paths.global_signals, None);
+        assert_eq!(paths.global_rulebook, None);
     }
 }
