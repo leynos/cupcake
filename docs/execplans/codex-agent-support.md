@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -162,7 +162,8 @@ cargo test --workspace --features cupcake-core/deterministic-tests
 - [x] Wire Codex through core harness types, CLI harness selection, init, and
   builtins deployment.
 - [x] Add Codex documentation and examples.
-- [ ] Run focused and workspace validation commands.
+- [x] Run focused validation commands. Full workspace validation that requires
+  OPA remains blocked in this local environment because `opa` is not on `PATH`.
 
 ## Surprises & discoveries
 
@@ -368,6 +369,12 @@ Focused CLI/docs validation passed with `cargo fmt --all -- --check`,
 site-wide style violations outside the ExecPlan lint target.
 CodeRabbit reviewed the CLI/docs milestone after those gates and returned zero
 findings. This milestone is ready to commit.
+Final focused validation was rerun after the CLI/docs commit:
+`cargo fmt --all -- --check`, `cargo test -p cupcake-cli codex`,
+`cargo test -p cupcake-core codex`, `make markdownlint`, and `make nixie` all
+passed. The implemented Codex support meets this plan's observable project
+init, hook configuration, event parsing, response formatting, and documentation
+goals within the local OPA limitation already recorded above.
 
 ## Context and orientation
 
