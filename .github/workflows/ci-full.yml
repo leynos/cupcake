@@ -36,6 +36,14 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      - name: Install mold
+        # The build standard's linker (see "The build standard" in
+        # docs/developers-guide.md). This workflow does not use shared-actions'
+        # setup-rust, so mold is installed here at the version Ubuntu 24.04 ships.
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends mold=2.30.0+dfsg-1build1
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -150,6 +158,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install mold
+        # The build standard's linker (see "The build standard" in
+        # docs/developers-guide.md). This workflow does not use shared-actions'
+        # setup-rust, so mold is installed here at the version Ubuntu 24.04 ships.
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends mold=2.30.0+dfsg-1build1
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -174,6 +190,14 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      - name: Install mold
+        # The build standard's linker (see "The build standard" in
+        # docs/developers-guide.md). This workflow does not use shared-actions'
+        # setup-rust, so mold is installed here at the version Ubuntu 24.04 ships.
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends mold=2.30.0+dfsg-1build1
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
