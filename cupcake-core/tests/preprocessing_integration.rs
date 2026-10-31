@@ -7,10 +7,10 @@
 
 use anyhow::Result;
 use cupcake_core::engine::Engine;
+use cupcake_core::fs_access;
 use cupcake_core::harness::types::HarnessType;
 use cupcake_core::preprocessing::{preprocess_input, PreprocessConfig};
 use serde_json::json;
-use std::fs;
 use tempfile::TempDir;
 
 /// Test that preprocessing protects naive user policies from spacing bypasses
@@ -22,10 +22,10 @@ async fn test_preprocessing_protects_naive_user_policy() -> Result<()> {
     let claude_dir = policies_dir.join("claude");
     let system_dir = claude_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
 
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     // Create a NAIVE user policy that uses basic contains() - vulnerable without preprocessing
     let naive_policy = r#"
@@ -55,7 +55,7 @@ deny contains decision if {
     }
 }
 "#;
-    fs::write(claude_dir.join("user_naive.rego"), naive_policy)?;
+    fs_access::write(claude_dir.join("user_naive.rego"), naive_policy)?;
 
     let empty_global = TempDir::new()?;
     let config = cupcake_core::engine::EngineConfig {
@@ -153,10 +153,10 @@ async fn test_preprocessing_preserves_quotes() -> Result<()> {
     let claude_dir = policies_dir.join("claude");
     let system_dir = claude_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
 
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     // Policy that checks for a specific commit message
     let quote_policy = r#"
@@ -184,7 +184,7 @@ deny contains decision if {
     }
 }
 "#;
-    fs::write(claude_dir.join("quote_test.rego"), quote_policy)?;
+    fs_access::write(claude_dir.join("quote_test.rego"), quote_policy)?;
 
     let empty_global = TempDir::new()?;
     let config = cupcake_core::engine::EngineConfig {

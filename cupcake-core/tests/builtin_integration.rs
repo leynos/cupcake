@@ -11,6 +11,7 @@
 use anyhow::Result;
 use cupcake_core::engine::builtins::*;
 use cupcake_core::engine::Engine;
+use cupcake_core::fs_access;
 use serde_json::json;
 use std::collections::HashMap;
 use tempfile::TempDir;
@@ -145,7 +146,7 @@ async fn test_builtin_policy_signal_access() -> Result<()> {
     // Use Claude harness-specific directory
     let claude_dir = policies_dir.join("claude");
     let system_dir = claude_dir.join("system");
-    std::fs::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
 
     // Use the authoritative system evaluation policy
     let evaluate_policy = r#"package cupcake.system
@@ -200,7 +201,7 @@ collect_verbs(verb_name) := result if {
 
 # Default to empty arrays if no decisions found
 default collect_verbs(_) := []"#;
-    std::fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     // Write a test policy that uses signals (in Claude directory)
     let test_policy = r#"package cupcake.policies.test_signal_access
@@ -223,7 +224,7 @@ add_context contains context_msg if {
     # add_context expects strings, not decision objects
     context_msg := concat(" ", ["Signal value:", test_signal])
 }"#;
-    std::fs::write(claude_dir.join("test_signal_access.rego"), test_policy)?;
+    fs_access::write(claude_dir.join("test_signal_access.rego"), test_policy)?;
 
     // Create a rulebook with test signal
     let rulebook_path = cupcake_dir.join("rulebook.yml");
@@ -233,7 +234,7 @@ add_context contains context_msg if {
     timeout_seconds: 1
 
 # No builtins configured - just using manual signals for this test"#;
-    std::fs::write(&rulebook_path, rulebook_content)?;
+    fs_access::write(&rulebook_path, rulebook_content)?;
 
     // Initialize engine from the temp directory
     // Disable global config to avoid interference
@@ -288,16 +289,16 @@ async fn test_post_edit_validation_flow() -> Result<()> {
     let claude_dir = policies_dir.join("claude");
     let builtins_dir = claude_dir.join("builtins");
     let system_dir = claude_dir.join("system");
-    std::fs::create_dir_all(&builtins_dir)?;
-    std::fs::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&builtins_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
 
     // Copy the real post_edit_check policy content from Claude fixtures
     let post_edit_policy = include_str!("../../fixtures/claude/builtins/post_edit_check.rego");
-    std::fs::write(builtins_dir.join("post_edit_check.rego"), post_edit_policy)?;
+    fs_access::write(builtins_dir.join("post_edit_check.rego"), post_edit_policy)?;
 
     // Use the authoritative system evaluation policy
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    std::fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     // Create rulebook with post_edit_check configuration
     let rulebook_path = cupcake_dir.join("rulebook.yml");
@@ -321,7 +322,7 @@ builtins:
         command: "exit 1"
         message: "This always fails"
 "#;
-    std::fs::write(&rulebook_path, rulebook_content)?;
+    fs_access::write(&rulebook_path, rulebook_content)?;
 
     // Create engine
     // Disable global config to avoid interference
