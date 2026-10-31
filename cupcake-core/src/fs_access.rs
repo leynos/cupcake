@@ -41,7 +41,7 @@ fn parent_and_name(path: &Path) -> io::Result<(&Path, &OsStr)> {
 }
 
 /// The most symlinks followed in the final path component, matching the usual
-/// operating system limit.
+/// operating system limit: a chain of this many links resolves, one more fails.
 const MAX_SYMLINK_HOPS: usize = 40;
 
 /// Follow symlinks in the final component of `path`, as `std::fs` does.
@@ -51,21 +51,25 @@ const MAX_SYMLINK_HOPS: usize = 40;
 /// symlink resolves to its target, which `std::fs::write` would create.
 fn resolve_final_symlinks(path: &Path) -> io::Result<PathBuf> {
     let mut current = path.to_path_buf();
-    for _ in 0..MAX_SYMLINK_HOPS {
+    let mut hops = 0;
+    loop {
         let (parent, name) = parent_and_name(&current)?;
         let dir = Dir::open_ambient_dir(parent, ambient_authority())?;
         match dir.symlink_metadata(name) {
             Ok(metadata) if metadata.is_symlink() => {
+                if hops == MAX_SYMLINK_HOPS {
+                    return Err(io::Error::other(format!(
+                        "too many levels of symbolic links: {}",
+                        path.display()
+                    )));
+                }
+                hops += 1;
                 let target = dir.read_link_contents(name)?;
                 current = parent.join(target);
             }
             _ => return Ok(current),
         }
     }
-    Err(io::Error::other(format!(
-        "too many levels of symbolic links: {}",
-        path.display()
-    )))
 }
 
 /// Open the directory that holds `path`, after following final symlinks, as a

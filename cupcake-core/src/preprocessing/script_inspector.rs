@@ -192,6 +192,24 @@ fn is_likely_script(path: &str) -> bool {
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
+    #[test]
+    fn test_load_script_content_through_a_chain_of_40_symlinks() {
+        let dir = tempfile::tempdir().unwrap();
+        let script = dir.path().join("deploy.sh");
+        crate::fs_access::write(&script, "echo deployed\n").unwrap();
+        let mut previous = script;
+        for index in 1..=40 {
+            let link = dir.path().join(format!("link{index}.sh"));
+            std::os::unix::fs::symlink(&previous, &link).unwrap();
+            previous = link;
+        }
+
+        let content = ScriptInspector::load_script_content(&previous, None);
+
+        assert_eq!(content.as_deref(), Some("echo deployed\n"));
+    }
+
     #[test]
     fn test_detect_direct_script_execution() {
         // Direct execution with ./
