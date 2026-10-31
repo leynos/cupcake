@@ -1,4 +1,4 @@
-// Factory AI-specific response builders
+//! Factory AI-specific response builders
 //!
 //! This module contains specialized builders for each Factory AI Droid hook type,
 //! ensuring 100% specification compliance with Factory AI's hook contract.

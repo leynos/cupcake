@@ -1,4 +1,4 @@
-//! Response builder for the Cursor `afterMcpExecution` hook.
+//! Response builder for the Cursor `afterMCPExecution` hook.
 
 use crate::harness::response::types::EngineDecision;
 use serde_json::{json, Value};

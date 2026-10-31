@@ -1,4 +1,4 @@
-//! Payload for the Cursor `afterMcpExecution` hook event.
+//! Payload for the Cursor `afterMCPExecution` hook event.
 
 use serde::{Deserialize, Serialize};
 

@@ -1,4 +1,4 @@
-//! Integration tests for the string concatenation workaround in policy conditions.
+//! Integration tests for building `ask` decision reasons with `concat`.
 
 #![allow(unused_imports)]
 
