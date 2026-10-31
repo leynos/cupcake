@@ -1228,7 +1228,7 @@ async fn init_project_config(harness: HarnessType) -> Result<()> {
         #[cfg(unix)]
         {
             // Owner: rwx, Group: ---, Other: ---
-            fs_access::set_dir_mode(cupcake_dir, 0o700)
+            fs_access::set_unix_mode(cupcake_dir, 0o700)
                 .context("Failed to set permissions on .cupcake directory")?;
             info!(".cupcake directory permissions set to 0o700 (owner-only access)");
         }
