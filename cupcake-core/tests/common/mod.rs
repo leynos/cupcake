@@ -7,8 +7,8 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
+use cupcake_core::fs_access;
 use cupcake_core::harness::types::HarnessType;
-use std::fs;
 use std::path::Path;
 use std::sync::Once;
 
@@ -56,22 +56,22 @@ pub fn create_test_project_for_harness(project_path: &Path, harness: HarnessType
     let harness_dir = policies_dir.join(harness_name);
     let system_dir = harness_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
-    fs::create_dir_all(cupcake_dir.join("signals"))?;
+    fs_access::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(cupcake_dir.join("signals"))?;
 
     // Create minimal rulebook
-    fs::write(
+    fs_access::write(
         cupcake_dir.join("rulebook.yml"),
         "signals: {}\nbuiltins: {}",
     )?;
 
     // Use fixture for system policy
     let system_policy = include_str!("../fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), system_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), system_policy)?;
 
     // Add minimal policy to ensure compilation works
     let minimal_policy = include_str!("../fixtures/minimal_policy.rego");
-    fs::write(harness_dir.join("minimal.rego"), minimal_policy)?;
+    fs_access::write(harness_dir.join("minimal.rego"), minimal_policy)?;
 
     Ok(())
 }
@@ -84,18 +84,18 @@ pub fn create_test_global_config(global_path: &Path) -> Result<()> {
     let claude_dir = policies_dir.join("claude");
     let system_dir = claude_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
-    fs::create_dir_all(global_path.join("signals"))?;
+    fs_access::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(global_path.join("signals"))?;
 
     // Create minimal rulebook
-    fs::write(
+    fs_access::write(
         global_path.join("rulebook.yml"),
         "signals: {}\nbuiltins: {}",
     )?;
 
     // Use fixture for global system policy
     let global_system_policy = include_str!("../fixtures/global_system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), global_system_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), global_system_policy)?;
 
     Ok(())
 }

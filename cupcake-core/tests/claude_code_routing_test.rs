@@ -1,8 +1,24 @@
 //! Integration tests for routing Claude Code events to policies.
 
+use cupcake_core::fs_access;
 use serde_json::Value;
-use std::fs;
 use tempfile::TempDir;
+
+/// The routing map JSON dumps in `debug_dir`.
+fn routing_map_json_files(debug_dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    fs_access::read_dir(debug_dir)
+        .expect("Debug directory should exist")
+        .into_iter()
+        .filter(|path| {
+            path.file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .starts_with("routing_map_")
+                && path.extension() == Some(std::ffi::OsStr::new("json"))
+        })
+        .collect()
+}
 
 /// Helper to create a test directory with minimal Cupcake structure
 fn setup_test_dir(_event_name: &str) -> TempDir {
@@ -16,8 +32,8 @@ fn setup_test_dir(_event_name: &str) -> TempDir {
     let system_dir = claude_dir.join("system");
     let signals_dir = cupcake_dir.join("signals");
 
-    fs::create_dir_all(&system_dir).unwrap();
-    fs::create_dir_all(&signals_dir).unwrap();
+    fs_access::create_dir_all(&system_dir).unwrap();
+    fs_access::create_dir_all(&signals_dir).unwrap();
 
     // Create minimal rulebook with no builtins
     let rulebook = r#"
@@ -25,7 +41,7 @@ version: "1.0"
 builtins: {}
 signals: {}
 "#;
-    fs::write(cupcake_dir.join("rulebook.yml"), rulebook).unwrap();
+    fs_access::write(cupcake_dir.join("rulebook.yml"), rulebook).unwrap();
 
     // Create system evaluate policy (required for compilation)
     let system_policy = r#"package cupcake.system
@@ -59,7 +75,7 @@ collect_verbs(verb_name) := result if {
 
 default collect_verbs(_) := []
 "#;
-    fs::write(system_dir.join("evaluate.rego"), system_policy).unwrap();
+    fs_access::write(system_dir.join("evaluate.rego"), system_policy).unwrap();
 
     temp_dir
 }
@@ -105,7 +121,7 @@ deny contains decision if {{
     );
 
     let policy_file = policies_dir.join(format!("{package_name}.rego"));
-    fs::write(policy_file, policy).unwrap();
+    fs_access::write(policy_file, policy).unwrap();
 }
 
 /// Helper to get Claude CLI path
@@ -144,7 +160,7 @@ fn get_claude_path() -> String {
 async fn verify_routing(project_path: &std::path::Path, expected_key: &str, expected_policy: &str) {
     // Create .claude directory
     let claude_dir = project_path.join(".claude");
-    fs::create_dir_all(&claude_dir).unwrap();
+    fs_access::create_dir_all(&claude_dir).unwrap();
 
     // Determine the command to use - prefer built binary in CI
     let command = if std::env::var("CI").is_ok() {
@@ -222,7 +238,7 @@ async fn verify_routing(project_path: &std::path::Path, expected_key: &str, expe
   }}
 }}"#
     );
-    fs::write(claude_dir.join("settings.json"), settings).unwrap();
+    fs_access::write(claude_dir.join("settings.json"), settings).unwrap();
 
     // Get claude CLI path
     let claude_path = get_claude_path();
@@ -293,9 +309,9 @@ async fn verify_routing(project_path: &std::path::Path, expected_key: &str, expe
 
     if debug_dir.exists() {
         eprintln!("[DEBUG] Contents of .cupcake/debug/routing:");
-        if let Ok(entries) = fs::read_dir(&debug_dir) {
-            for entry in entries.flatten() {
-                eprintln!("  - {:?}", entry.path());
+        if let Ok(entries) = fs_access::read_dir(&debug_dir) {
+            for path in entries {
+                eprintln!("  - {path:?}");
             }
         }
     } else {
@@ -310,27 +326,15 @@ async fn verify_routing(project_path: &std::path::Path, expected_key: &str, expe
         );
     }
 
-    let entries = fs::read_dir(&debug_dir)
-        .expect("Debug directory should exist")
-        .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.path()
-                .file_name()
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .starts_with("routing_map_")
-                && e.path().extension() == Some(std::ffi::OsStr::new("json"))
-        })
-        .collect::<Vec<_>>();
+    let entries = routing_map_json_files(&debug_dir);
 
     assert!(
         !entries.is_empty(),
         "Should have generated routing map JSON"
     );
 
-    let json_path = entries[0].path();
-    let json_content = fs::read_to_string(&json_path).unwrap();
+    let json_path = &entries[0];
+    let json_content = fs_access::read_to_string(json_path).unwrap();
     let routing_data: Value = serde_json::from_str(&json_content).unwrap();
 
     // Verify the expected routing key exists
@@ -501,7 +505,7 @@ async fn test_wildcard_policy_routing() {
 
     // Create .claude directory and settings.json
     let claude_dir = temp_dir.path().join(".claude");
-    fs::create_dir_all(&claude_dir).unwrap();
+    fs_access::create_dir_all(&claude_dir).unwrap();
 
     // Determine the command to use - prefer built binary in CI
     let command = if std::env::var("CI").is_ok() {
@@ -574,7 +578,7 @@ async fn test_wildcard_policy_routing() {
   }}
 }}"#
     );
-    fs::write(claude_dir.join("settings.json"), settings).unwrap();
+    fs_access::write(claude_dir.join("settings.json"), settings).unwrap();
     eprintln!("[TIMING] Settings written: {:?}", test_start.elapsed());
 
     // Get claude CLI path
@@ -626,22 +630,10 @@ async fn test_wildcard_policy_routing() {
     let read_start = Instant::now();
 
     let debug_dir = temp_dir.path().join(".cupcake/debug/routing");
-    let entries = fs::read_dir(&debug_dir)
-        .expect("Debug directory should exist")
-        .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.path()
-                .file_name()
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .starts_with("routing_map_")
-                && e.path().extension() == Some(std::ffi::OsStr::new("json"))
-        })
-        .collect::<Vec<_>>();
+    let entries = routing_map_json_files(&debug_dir);
 
-    let json_path = entries[0].path();
-    let json_content = fs::read_to_string(&json_path).unwrap();
+    let json_path = &entries[0];
+    let json_content = fs_access::read_to_string(json_path).unwrap();
     let routing_data: Value = serde_json::from_str(&json_content).unwrap();
 
     eprintln!(
@@ -714,11 +706,11 @@ deny contains decision if {
     }
 }"#;
 
-    fs::write(policies_dir.join("test_multi.rego"), policy).unwrap();
+    fs_access::write(policies_dir.join("test_multi.rego"), policy).unwrap();
 
     // Create .claude directory and settings.json
     let claude_dir = temp_dir.path().join(".claude");
-    fs::create_dir_all(&claude_dir).unwrap();
+    fs_access::create_dir_all(&claude_dir).unwrap();
 
     // Determine the command to use - prefer built binary in CI
     let command = if std::env::var("CI").is_ok() {
@@ -791,7 +783,7 @@ deny contains decision if {
   }}
 }}"#
     );
-    fs::write(claude_dir.join("settings.json"), settings).unwrap();
+    fs_access::write(claude_dir.join("settings.json"), settings).unwrap();
 
     // Get claude CLI path
     let claude_path = get_claude_path();
@@ -831,22 +823,10 @@ deny contains decision if {
 
     // Read routing map
     let debug_dir = temp_dir.path().join(".cupcake/debug/routing");
-    let entries = fs::read_dir(&debug_dir)
-        .expect("Debug directory should exist")
-        .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.path()
-                .file_name()
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .starts_with("routing_map_")
-                && e.path().extension() == Some(std::ffi::OsStr::new("json"))
-        })
-        .collect::<Vec<_>>();
+    let entries = routing_map_json_files(&debug_dir);
 
-    let json_path = entries[0].path();
-    let json_content = fs::read_to_string(&json_path).unwrap();
+    let json_path = &entries[0];
+    let json_content = fs_access::read_to_string(json_path).unwrap();
     let routing_data: Value = serde_json::from_str(&json_content).unwrap();
 
     let routing_entries = &routing_data["project"]["routing_entries"];

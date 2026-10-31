@@ -5,8 +5,8 @@
 //! all environments including CI.
 
 use anyhow::Result;
+use cupcake_core::fs_access;
 use serial_test::serial;
-use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use tempfile::TempDir;
@@ -134,7 +134,7 @@ fn test_init_creates_all_required_files() -> Result<()> {
         assert!(file_path.is_file(), ".cupcake/{file_name} should be a file");
 
         // Verify file is not empty
-        let content = fs::read_to_string(&file_path)?;
+        let content = fs_access::read_to_string(&file_path)?;
         assert!(
             !content.is_empty(),
             "File .cupcake/{file_name} should not be empty"
@@ -150,7 +150,7 @@ fn test_rulebook_yml_content() -> Result<()> {
     let (_temp_dir, project_path) = run_init_in_temp_dir()?;
     let rulebook_path = project_path.join(".cupcake/rulebook.yml");
 
-    let content = fs::read_to_string(&rulebook_path)?;
+    let content = fs_access::read_to_string(&rulebook_path)?;
 
     // Verify key sections are present
     assert!(
@@ -196,7 +196,7 @@ fn test_system_evaluate_policy_content() -> Result<()> {
     // Check evaluate.rego at root level (new structure)
     let evaluate_path = project_path.join(".cupcake/system/evaluate.rego");
 
-    let content = fs::read_to_string(&evaluate_path)?;
+    let content = fs_access::read_to_string(&evaluate_path)?;
 
     // Verify package declaration
     assert!(
@@ -270,7 +270,7 @@ fn test_builtin_policies_content() -> Result<()> {
 
     // Test git_pre_check.rego
     let git_check_path = builtins_dir.join("git_pre_check.rego");
-    let content = fs::read_to_string(&git_check_path)?;
+    let content = fs_access::read_to_string(&git_check_path)?;
     assert!(
         content.contains("package cupcake.policies.builtins.git_pre_check"),
         "git_pre_check.rego should have correct package"
@@ -282,7 +282,7 @@ fn test_builtin_policies_content() -> Result<()> {
 
     // Test post_edit_check.rego
     let post_edit_path = builtins_dir.join("post_edit_check.rego");
-    let content = fs::read_to_string(&post_edit_path)?;
+    let content = fs_access::read_to_string(&post_edit_path)?;
     assert!(
         content.contains("package cupcake.policies.builtins.post_edit_check"),
         "post_edit_check.rego should have correct package"
@@ -290,7 +290,7 @@ fn test_builtin_policies_content() -> Result<()> {
 
     // Test claude_code_always_inject_on_prompt.rego
     let inject_path = builtins_dir.join("claude_code_always_inject_on_prompt.rego");
-    let content = fs::read_to_string(&inject_path)?;
+    let content = fs_access::read_to_string(&inject_path)?;
     assert!(
         content.contains("package cupcake.policies.builtins.claude_code_always_inject_on_prompt"),
         "claude_code_always_inject_on_prompt.rego should have correct package"
@@ -302,7 +302,7 @@ fn test_builtin_policies_content() -> Result<()> {
 
     // Test protected_paths.rego
     let protected_path = builtins_dir.join("protected_paths.rego");
-    let content = fs::read_to_string(&protected_path)?;
+    let content = fs_access::read_to_string(&protected_path)?;
     assert!(
         content.contains("package cupcake.policies.builtins.protected_paths"),
         "protected_paths.rego should have correct package"
@@ -314,7 +314,7 @@ fn test_builtin_policies_content() -> Result<()> {
 
     // Test rulebook_security_guardrails.rego
     let rulebook_path = builtins_dir.join("rulebook_security_guardrails.rego");
-    let content = fs::read_to_string(&rulebook_path)?;
+    let content = fs_access::read_to_string(&rulebook_path)?;
     assert!(
         content.contains("package cupcake.policies.builtins.rulebook_security_guardrails"),
         "rulebook_security_guardrails.rego should have correct package"
@@ -346,7 +346,7 @@ fn test_init_idempotent() -> Result<()> {
 
     // Get the content of a file to verify it doesn't change
     let rulebook_path = project_path.join(".cupcake/rulebook.yml");
-    let original_content = fs::read_to_string(&rulebook_path)?;
+    let original_content = fs_access::read_to_string(&rulebook_path)?;
 
     // Second init with same harness should be safe
     let output = Command::new(&cupcake_bin)
@@ -363,7 +363,7 @@ fn test_init_idempotent() -> Result<()> {
     );
 
     // Content should be unchanged
-    let new_content = fs::read_to_string(&rulebook_path)?;
+    let new_content = fs_access::read_to_string(&rulebook_path)?;
     assert_eq!(
         original_content, new_content,
         "Running init twice should not modify existing files"
@@ -428,15 +428,11 @@ async fn test_init_creates_valid_engine_structure() -> Result<()> {
 #[test]
 #[cfg(unix)]
 fn test_init_file_permissions() -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-
     let (_temp_dir, project_path) = run_init_in_temp_dir()?;
     let cupcake_dir = project_path.join(".cupcake");
 
     // Check directory permissions (should be readable/executable by owner)
-    let dir_metadata = fs::metadata(&cupcake_dir)?;
-    let dir_perms = dir_metadata.permissions();
-    let dir_mode = dir_perms.mode() & 0o777;
+    let dir_mode = fs_access::unix_mode(&cupcake_dir)? & 0o777;
 
     // Directory should be at least 0o700 (owner rwx)
     assert!(
@@ -446,9 +442,7 @@ fn test_init_file_permissions() -> Result<()> {
 
     // Check a policy file permissions (system/evaluate.rego at root level)
     let policy_path = cupcake_dir.join("system/evaluate.rego");
-    let file_metadata = fs::metadata(&policy_path)?;
-    let file_perms = file_metadata.permissions();
-    let file_mode = file_perms.mode() & 0o777;
+    let file_mode = fs_access::unix_mode(&policy_path)? & 0o777;
 
     // File should be at least 0o600 (owner rw)
     assert!(
@@ -465,7 +459,7 @@ fn test_rulebook_yml_is_valid_yaml() -> Result<()> {
     let (_temp_dir, project_path) = run_init_in_temp_dir()?;
     let rulebook_path = project_path.join(".cupcake/rulebook.yml");
 
-    let content = fs::read_to_string(&rulebook_path)?;
+    let content = fs_access::read_to_string(&rulebook_path)?;
 
     // Basic validation - check it's not empty and has expected YAML structure markers
     assert!(!content.is_empty(), "rulebook.yml should not be empty");
@@ -492,9 +486,7 @@ fn test_correct_number_of_files_created() -> Result<()> {
     let mut dir_count = 0;
 
     fn count_entries(path: &std::path::Path, files: &mut u32, dirs: &mut u32) -> Result<()> {
-        for entry in fs::read_dir(path)? {
-            let entry = entry?;
-            let path = entry.path();
+        for path in fs_access::read_dir(path)? {
             if path.is_dir() {
                 *dirs += 1;
                 count_entries(&path, files, dirs)?;
@@ -553,7 +545,7 @@ fn test_init_cursor_creates_cursor_only() -> Result<()> {
 
     // Cursor should have 5 builtins (no always_inject_on_prompt or enforce_full_file_read)
     let builtins_dir = cupcake_dir.join("policies/cursor/builtins");
-    let builtin_count = fs::read_dir(&builtins_dir)?.count();
+    let builtin_count = fs_access::read_dir(&builtins_dir)?.len();
     assert_eq!(builtin_count, 5, "Cursor should have 5 builtins");
 
     Ok(())
@@ -588,7 +580,7 @@ fn test_init_opencode_creates_opencode_only() -> Result<()> {
 
     // OpenCode should have 7 builtins (same as Claude)
     let builtins_dir = cupcake_dir.join("policies/opencode/builtins");
-    let builtin_count = fs::read_dir(&builtins_dir)?.count();
+    let builtin_count = fs_access::read_dir(&builtins_dir)?.len();
     assert_eq!(builtin_count, 7, "OpenCode should have 7 builtins");
 
     Ok(())
@@ -623,7 +615,7 @@ fn test_init_factory_creates_factory_only() -> Result<()> {
 
     // Factory should have 7 builtins (same as Claude)
     let builtins_dir = cupcake_dir.join("policies/factory/builtins");
-    let builtin_count = fs::read_dir(&builtins_dir)?.count();
+    let builtin_count = fs_access::read_dir(&builtins_dir)?.len();
     assert_eq!(builtin_count, 7, "Factory should have 7 builtins");
 
     Ok(())
@@ -693,12 +685,12 @@ fn test_init_can_add_second_harness() -> Result<()> {
 
     // Verify cursor has correct builtins
     let cursor_builtins_dir = project_path.join(".cupcake/policies/cursor/builtins");
-    let cursor_builtin_count = fs::read_dir(&cursor_builtins_dir)?.count();
+    let cursor_builtin_count = fs_access::read_dir(&cursor_builtins_dir)?.len();
     assert_eq!(cursor_builtin_count, 5, "Cursor should have 5 builtins");
 
     // Verify claude still has its builtins
     let claude_builtins_dir = project_path.join(".cupcake/policies/claude/builtins");
-    let claude_builtin_count = fs::read_dir(&claude_builtins_dir)?.count();
+    let claude_builtin_count = fs_access::read_dir(&claude_builtins_dir)?.len();
     assert_eq!(
         claude_builtin_count, 7,
         "Claude should still have 7 builtins"
