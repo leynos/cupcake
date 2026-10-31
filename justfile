@@ -1,5 +1,8 @@
 # Cupcake Development Commands - Workspace Edition
 
+# The Whitaker wrapper; override to use a binary outside PATH
+whitaker := env_var_or_default("WHITAKER", "whitaker")
+
 # Default recipe - show available commands
 default:
     @just --list
@@ -164,9 +167,15 @@ check:
 fmt:
     cargo fmt --all
 
-# Run clippy linter
-lint:
+# Run Clippy and the Whitaker Dylint suite with warnings denied
+lint: lint-whitaker
     cargo clippy --workspace --all-targets
+
+# Run the Whitaker Dylint suite. The driver builds under its own toolchain, so
+# the repository's development flags and backend are removed from its
+# environment; install the suite with whitaker-installer first.
+lint-whitaker:
+    env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS -u CARGO_PROFILE_DEV_CODEGEN_BACKEND -u CARGO_BUILD_TARGET -u CFLAGS -u LDFLAGS DYLINT_RUSTFLAGS="-D warnings" {{whitaker}} --all -- --workspace --all-targets --all-features
 
 # Fix common issues automatically
 fix:
