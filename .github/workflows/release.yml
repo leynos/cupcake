@@ -23,7 +23,7 @@ jobs:
     strategy:
       fail-fast: true # Stop immediately if any platform fails
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-24.04, macos-latest, windows-latest]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

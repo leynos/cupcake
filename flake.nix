@@ -52,6 +52,10 @@
               src = craneLib.cleanCargoSource (craneLib.path ./.);
               cargoExtraArgs = "-p ${pname}";
               doCheck = false;
+              # A shipped artefact stays on the platform linker: an assigned
+              # RUSTFLAGS displaces the mold table in .cargo/config.toml, which
+              # the Nix sandbox does not provide. See docs/developers-guide.md.
+              RUSTFLAGS = "";
             };
             cargoArtifacts = craneLib.buildDepsOnly craneArgs;
           in
@@ -85,6 +89,9 @@
               pname = "cupcake";
               version = cupcake-cli.version;
               pyproject = true;
+
+              # As for cupcake-cli: the platform linker, not the mold table.
+              RUSTFLAGS = "";
 
               src = pkgs.lib.cleanSourceWith {
                 src = ./.;

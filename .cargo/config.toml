@@ -5,12 +5,16 @@
 # frontend flag and the Cranelift backend are not used (see "The build
 # standard" in docs/developers-guide.md).
 #
+# `-fuse-ld=mold` is a compiler-driver flag: it needs GCC 12.1 or newer, or
+# clang, as the default driver. A host with an older GCC driver rejects it even
+# with mold installed; set `-Clinker=clang` there.
+#
 # Cargo selects a single `rustflags` source rather than merging them: a
 # matching `[target.*]` table replaces `[build] rustflags` outright, and an
-# assigned `RUSTFLAGS` replaces both. The Linux table therefore repeats every
-# `[build]` flag, and the Makefile composes the linker flag into the
-# `RUSTFLAGS` its recipes set. Coverage and release builds assign `RUSTFLAGS`
-# without it on purpose.
+# assigned `RUSTFLAGS` replaces both. The file has no `[build] rustflags`, and
+# the `justfile` recipes assign no `RUSTFLAGS`, so every recipe takes the Linux
+# table. Release, `cross` and Nix builds assign an empty `RUSTFLAGS` on purpose,
+# which displaces the table (scripts/check_build_standard.py holds all of it).
 
 [alias]
 t = "test --workspace --features cupcake-core/deterministic-tests"
