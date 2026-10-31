@@ -190,6 +190,8 @@ fn is_likely_script(path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `script_inspector` module.
+
     use super::*;
 
     #[cfg(unix)]

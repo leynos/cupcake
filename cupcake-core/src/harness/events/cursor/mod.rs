@@ -81,6 +81,8 @@ impl CursorEvent {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `cursor` module.
+
     use super::*;
 
     #[test]

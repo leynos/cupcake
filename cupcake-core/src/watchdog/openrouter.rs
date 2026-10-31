@@ -228,6 +228,8 @@ impl WatchdogBackend for OpenRouterBackend {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `openrouter` module.
+
     use super::*;
     use crate::watchdog::prompts::DEFAULT_SYSTEM_PROMPT;
 

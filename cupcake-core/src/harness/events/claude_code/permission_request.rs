@@ -68,6 +68,8 @@ impl PermissionRequestPayload {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `permission_request` module.
+
     use super::*;
     use crate::harness::events::claude_code::BashToolInput;
     use serde_json::json;

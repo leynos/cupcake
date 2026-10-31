@@ -162,6 +162,8 @@ const _: () = {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `bindings` module.
+
     use super::*;
 
     #[test]

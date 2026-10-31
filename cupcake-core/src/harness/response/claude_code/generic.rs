@@ -76,6 +76,8 @@ impl GenericResponseBuilder {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `generic` module.
+
     use super::*;
 
     #[test]

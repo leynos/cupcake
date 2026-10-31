@@ -73,6 +73,8 @@ impl CursorResponseBuilder {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `cursor` module.
+
     use super::*;
     use crate::harness::events::cursor::*;
 

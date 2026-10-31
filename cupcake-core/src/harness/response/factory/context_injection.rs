@@ -84,6 +84,8 @@ fn context_output(is_user_prompt_submit: bool, additional_context: String) -> Ho
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `context_injection` module.
+
     use super::*;
 
     #[test]

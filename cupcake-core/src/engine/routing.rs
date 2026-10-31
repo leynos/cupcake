@@ -42,6 +42,8 @@ pub fn create_event_key(event_name: &str, tool_name: Option<&str>) -> String {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `routing` module.
+
     use super::*;
 
     #[test]

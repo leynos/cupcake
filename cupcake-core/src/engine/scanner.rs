@@ -98,6 +98,8 @@ fn should_include_policy(path: &Path, enabled_builtins: &[String]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `scanner` module.
+
     use super::*;
     use tempfile::TempDir;
     use tokio::fs;

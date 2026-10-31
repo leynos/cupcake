@@ -55,6 +55,8 @@ pub fn build(decision: &EngineDecision, _agent_messages: Option<Vec<String>>) ->
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `before_submit_prompt` module.
+
     use super::*;
 
     #[test]

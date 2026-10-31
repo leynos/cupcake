@@ -25,6 +25,8 @@ impl SignalTelemetry {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `debug` module.
+
     use super::*;
 
     #[test]
