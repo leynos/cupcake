@@ -1,12 +1,10 @@
 //! Adversarial test suite for TOB-EQTY-LAB-CUPCAKE-3
 //! Tests defenses against string matching bypass via spacing and obfuscation
 
-#![allow(unused_imports)]
-
 use anyhow::Result;
 use cupcake_core::engine::Engine;
+use cupcake_core::fs_access;
 use serde_json::json;
-use std::fs;
 use tempfile::TempDir;
 
 /// Test that extra spaces in dangerous commands are properly detected
@@ -20,22 +18,22 @@ async fn test_blocks_rm_with_extra_spaces() -> Result<()> {
     let builtins_dir = claude_dir.join("builtins");
     let shared_system_dir = cupcake_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
-    fs::create_dir_all(&builtins_dir)?;
-    fs::create_dir_all(&shared_system_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&builtins_dir)?;
+    fs_access::create_dir_all(&shared_system_dir)?;
 
     // Write the authoritative system evaluation policy
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     // Write helper library (CRITICAL for fixing spacing bypass)
     let helpers_commands = include_str!("../../fixtures/system/commands.rego");
-    fs::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
+    fs_access::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
 
     // Use the actual rulebook security policy with helper library
     let rulebook_policy =
         include_str!("../../fixtures/claude/builtins/rulebook_security_guardrails.rego");
-    fs::write(
+    fs_access::write(
         builtins_dir.join("rulebook_security_guardrails.rego"),
         rulebook_policy,
     )?;
@@ -47,7 +45,7 @@ builtins:
     enabled: true
     message: "Cupcake files are protected from adversarial commands"
 "#;
-    fs::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
+    fs_access::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
 
     let empty_global = TempDir::new()?;
     let config = cupcake_core::engine::EngineConfig {
@@ -112,19 +110,19 @@ async fn test_blocks_obfuscated_commands() -> Result<()> {
     let builtins_dir = claude_dir.join("builtins");
     let shared_system_dir = cupcake_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
-    fs::create_dir_all(&builtins_dir)?;
-    fs::create_dir_all(&shared_system_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&builtins_dir)?;
+    fs_access::create_dir_all(&shared_system_dir)?;
 
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     let helpers_commands = include_str!("../../fixtures/system/commands.rego");
-    fs::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
+    fs_access::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
 
     let rulebook_policy =
         include_str!("../../fixtures/claude/builtins/rulebook_security_guardrails.rego");
-    fs::write(
+    fs_access::write(
         builtins_dir.join("rulebook_security_guardrails.rego"),
         rulebook_policy,
     )?;
@@ -134,7 +132,7 @@ builtins:
   rulebook_security_guardrails:
     enabled: true
 "#;
-    fs::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
+    fs_access::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
 
     let empty_global = TempDir::new()?;
     let config = cupcake_core::engine::EngineConfig {
@@ -201,20 +199,20 @@ async fn test_blocks_git_no_verify_with_spacing() -> Result<()> {
     let builtins_dir = claude_dir.join("builtins");
     let shared_system_dir = cupcake_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
-    fs::create_dir_all(&builtins_dir)?;
-    fs::create_dir_all(&shared_system_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&builtins_dir)?;
+    fs_access::create_dir_all(&shared_system_dir)?;
 
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     // Write helper library
     let helpers_commands = include_str!("../../fixtures/system/commands.rego");
-    fs::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
+    fs_access::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
 
     // Use the actual git_block_no_verify policy
     let git_policy = include_str!("../../fixtures/claude/builtins/git_block_no_verify.rego");
-    fs::write(builtins_dir.join("git_block_no_verify.rego"), git_policy)?;
+    fs_access::write(builtins_dir.join("git_block_no_verify.rego"), git_policy)?;
 
     let rulebook_content = r#"
 builtins:
@@ -222,7 +220,7 @@ builtins:
     enabled: true
     message: "Git hooks must not be bypassed"
 "#;
-    fs::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
+    fs_access::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
 
     let empty_global = TempDir::new()?;
     let config = cupcake_core::engine::EngineConfig {
@@ -320,18 +318,18 @@ async fn test_protected_paths_blocks_obfuscated_writes() -> Result<()> {
     let builtins_dir = claude_dir.join("builtins");
     let shared_system_dir = cupcake_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
-    fs::create_dir_all(&builtins_dir)?;
-    fs::create_dir_all(&shared_system_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&builtins_dir)?;
+    fs_access::create_dir_all(&shared_system_dir)?;
 
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     let helpers_commands = include_str!("../../fixtures/system/commands.rego");
-    fs::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
+    fs_access::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
 
     let protected_policy = include_str!("../../fixtures/claude/builtins/protected_paths.rego");
-    fs::write(builtins_dir.join("protected_paths.rego"), protected_policy)?;
+    fs_access::write(builtins_dir.join("protected_paths.rego"), protected_policy)?;
 
     let rulebook_content = r#"
 builtins:
@@ -343,7 +341,7 @@ builtins:
       - "secrets/"
       - "*.key"
 "#;
-    fs::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
+    fs_access::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
 
     let empty_global = TempDir::new()?;
     let config = cupcake_core::engine::EngineConfig {
@@ -437,11 +435,11 @@ async fn test_preprocessing_protects_naive_policies() -> Result<()> {
     let claude_dir = policies_dir.join("claude");
     let system_dir = claude_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
-    fs::create_dir_all(&claude_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&claude_dir)?;
 
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     // Create a naive user policy that uses basic contains() - previously vulnerable
     let naive_policy = r#"
@@ -471,7 +469,7 @@ deny contains decision if {
     }
 }
 "#;
-    fs::write(claude_dir.join("user_naive.rego"), naive_policy)?;
+    fs_access::write(claude_dir.join("user_naive.rego"), naive_policy)?;
 
     let empty_global = TempDir::new()?;
     let config = cupcake_core::engine::EngineConfig {

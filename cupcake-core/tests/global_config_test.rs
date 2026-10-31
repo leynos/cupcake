@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use cupcake_core::engine::global_config::GlobalPaths;
+use cupcake_core::fs_access;
 use serial_test::serial;
 use std::env; // Still needed for test_global_config_graceful_absence
 use tempfile::TempDir;
@@ -81,7 +82,7 @@ fn test_global_config_initialization() -> Result<()> {
     assert!(global_paths.rulebook.exists());
 
     // Verify rulebook content
-    let rulebook_content = std::fs::read_to_string(&global_paths.rulebook)?;
+    let rulebook_content = fs_access::read_to_string(&global_paths.rulebook)?;
     assert!(rulebook_content.contains("Global Cupcake Configuration"));
 
     // Note: System evaluate.rego files are created by init_global_config() in main.rs,

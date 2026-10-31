@@ -1,10 +1,8 @@
 //! Minimal integration test for an `ask` decision.
 
-#![allow(unused_imports)]
-
 use cupcake_core::engine::Engine;
+use cupcake_core::fs_access;
 use serde_json::json;
-use std::fs;
 use tempfile::TempDir;
 
 #[tokio::test]
@@ -18,7 +16,7 @@ async fn test_minimal_ask_rule() {
     let claude_dir = policies_dir.join("claude");
     let system_dir = claude_dir.join("system");
 
-    fs::create_dir_all(&system_dir).unwrap();
+    fs_access::create_dir_all(&system_dir).unwrap();
 
     // Use the exact same system policy as examples directory
     let system_policy = r#"package cupcake.system
@@ -51,7 +49,7 @@ collect_verbs(verb_name) := result if {
 default collect_verbs(_) := []
 "#;
 
-    fs::write(system_dir.join("evaluate.rego"), system_policy).unwrap();
+    fs_access::write(system_dir.join("evaluate.rego"), system_policy).unwrap();
 
     // Minimal test policy that always asks
     let test_policy = r#"package cupcake.policies.minimal
@@ -76,7 +74,7 @@ ask contains decision if {
 }
 "#;
 
-    fs::write(claude_dir.join("minimal.rego"), test_policy).unwrap();
+    fs_access::write(claude_dir.join("minimal.rego"), test_policy).unwrap();
 
     eprintln!("Test policies created at: {claude_dir:?}");
 

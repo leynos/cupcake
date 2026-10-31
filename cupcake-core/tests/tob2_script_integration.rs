@@ -3,14 +3,12 @@
 //! This test creates real policies and real script files to demonstrate
 //! that our script inspection feature properly fixes the TOB-2 vulnerability.
 
-#![allow(unused_imports)]
-
 use anyhow::Result;
 use cupcake_core::engine::Engine;
+use cupcake_core::fs_access;
 use cupcake_core::harness::types::HarnessType;
 use cupcake_core::preprocessing::{preprocess_input, PreprocessConfig};
 use serde_json::json;
-use std::fs;
 use tempfile::TempDir;
 
 /// Full integration test: Policy + Real Script + Engine Evaluation
@@ -22,11 +20,11 @@ async fn test_tob2_script_bypass_is_fixed() -> Result<()> {
     let claude_dir = policies_dir.join("claude");
     let system_dir = claude_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
 
     // Step 1: Write the system evaluation policy
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     // Step 2: Create a REAL policy that checks script content
     let script_inspector_policy = r#"
@@ -80,7 +78,7 @@ deny contains decision if {
 }
 "#;
 
-    fs::write(
+    fs_access::write(
         claude_dir.join("script_inspector.rego"),
         script_inspector_policy,
     )?;
@@ -99,15 +97,12 @@ rm -rf /important/data
 echo "Deployment complete!"
 "#;
 
-    fs::write(&malicious_script, script_content)?;
+    fs_access::write(&malicious_script, script_content)?;
 
     // Make it executable (for realism)
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&malicious_script)?.permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&malicious_script, perms)?;
+        fs_access::set_unix_mode(&malicious_script, 0o755)?;
     }
 
     // Step 4: Initialize the engine
@@ -183,10 +178,10 @@ async fn test_tob2_vulnerability_without_script_inspection() -> Result<()> {
     let claude_dir = policies_dir.join("claude");
     let system_dir = claude_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
 
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     // Naive policy that only checks the command, not script content
     let naive_policy = r#"
@@ -216,11 +211,11 @@ deny contains decision if {
 }
 "#;
 
-    fs::write(claude_dir.join("naive.rego"), naive_policy)?;
+    fs_access::write(claude_dir.join("naive.rego"), naive_policy)?;
 
     // Create the same malicious script
     let evil_script = temp_dir.path().join("innocent.sh");
-    fs::write(
+    fs_access::write(
         &evil_script,
         "#!/bin/bash\nrm -rf .cupcake\nrm -rf /important",
     )?;
@@ -295,7 +290,7 @@ async fn test_various_script_execution_patterns() -> Result<()> {
     ];
 
     for (filename, content) in &scripts {
-        fs::write(temp_dir.path().join(filename), content)?;
+        fs_access::write(temp_dir.path().join(filename), content)?;
     }
 
     // Test various execution patterns

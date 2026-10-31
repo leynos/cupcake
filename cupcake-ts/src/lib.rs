@@ -156,13 +156,7 @@ impl Task for EvaluateTask {
 }
 
 /// Thread safety verification
-/// This const block ensures the BindingEngine is Send + Sync at compile time
-const _: () = {
-    fn assert_send<T: Send>() {}
-    fn assert_sync<T: Sync>() {}
+/// This const block ensures the PolicyEngine is Send + Sync at compile time
+const fn assert_send_sync<T: Send + Sync>() {}
 
-    fn _assertions() {
-        assert_send::<PolicyEngine>();
-        assert_sync::<PolicyEngine>();
-    }
-};
+const _: () = assert_send_sync::<PolicyEngine>();

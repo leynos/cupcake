@@ -2,12 +2,10 @@
 //!
 //! Tests that protected paths allow reads but block writes
 
-#![allow(unused_imports)]
-
 use anyhow::Result;
 use cupcake_core::engine::Engine;
+use cupcake_core::fs_access;
 use serde_json::json;
-use std::fs;
 use tempfile::TempDir;
 
 /// Test that protected_paths blocks writes but allows reads
@@ -23,21 +21,21 @@ async fn test_protected_paths_read_write_distinction() -> Result<()> {
     let builtins_dir = claude_dir.join("builtins");
     let shared_system_dir = cupcake_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
-    fs::create_dir_all(&builtins_dir)?;
-    fs::create_dir_all(&shared_system_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&builtins_dir)?;
+    fs_access::create_dir_all(&shared_system_dir)?;
 
     // Use the authoritative system evaluation policy
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     // Write helper library (required by refactored builtins)
     let helpers_commands = include_str!("../../fixtures/system/commands.rego");
-    fs::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
+    fs_access::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
 
     // Use the actual protected_paths policy from Claude fixtures
     let protected_policy = include_str!("../../fixtures/claude/builtins/protected_paths.rego");
-    fs::write(builtins_dir.join("protected_paths.rego"), protected_policy)?;
+    fs_access::write(builtins_dir.join("protected_paths.rego"), protected_policy)?;
 
     // Create rulebook with protected_paths configuration
     // The builtin generates its own signals from the config
@@ -51,7 +49,7 @@ builtins:
       - "src/legacy/"
       - "*.secret"
 "#;
-    fs::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
+    fs_access::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
 
     // Create the engine without global config to avoid interference from global builtins
     // Use an empty temp dir as sentinel to disable global config discovery
@@ -194,19 +192,19 @@ async fn test_protected_paths_bash_whitelist() -> Result<()> {
     let builtins_dir = claude_dir.join("builtins");
     let shared_system_dir = cupcake_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
-    fs::create_dir_all(&builtins_dir)?;
-    fs::create_dir_all(&shared_system_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&builtins_dir)?;
+    fs_access::create_dir_all(&shared_system_dir)?;
 
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     // Write helper library (required by refactored builtins)
     let helpers_commands = include_str!("../../fixtures/system/commands.rego");
-    fs::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
+    fs_access::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
 
     let protected_policy = include_str!("../../fixtures/claude/builtins/protected_paths.rego");
-    fs::write(builtins_dir.join("protected_paths.rego"), protected_policy)?;
+    fs_access::write(builtins_dir.join("protected_paths.rego"), protected_policy)?;
 
     let rulebook_content = r#"
 builtins:
@@ -215,7 +213,7 @@ builtins:
     paths:
       - "secure.txt"
 "#;
-    fs::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
+    fs_access::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
 
     // Create the engine without global config to avoid interference from global builtins
     // Use an empty temp dir as sentinel to disable global config discovery
