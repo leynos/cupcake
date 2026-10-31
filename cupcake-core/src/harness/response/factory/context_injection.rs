@@ -21,34 +21,13 @@ impl ContextInjectionResponseBuilder {
 
         match decision {
             EngineDecision::Block { feedback } => {
-                if is_user_prompt_submit {
-                    // UserPromptSubmit Block uses decision: "block" format
-                    response.decision = Some("block".to_string());
-                    response.reason = Some(feedback.clone());
-                } else {
-                    // SessionStart uses standard continue: false format
-                    response.continue_execution = Some(false);
-                    response.stop_reason = Some(feedback.clone());
-                }
+                apply_block(&mut response, feedback, is_user_prompt_submit);
             }
             EngineDecision::Allow { .. } => {
                 // Add context injection if provided
-                if let Some(contexts) = context_to_inject {
-                    if !contexts.is_empty() {
-                        let combined_context = contexts.join("\n");
-
-                        if is_user_prompt_submit {
-                            response.hook_specific_output =
-                                Some(HookSpecificOutput::UserPromptSubmit {
-                                    additional_context: Some(combined_context),
-                                });
-                        } else {
-                            response.hook_specific_output =
-                                Some(HookSpecificOutput::SessionStart {
-                                    additional_context: Some(combined_context),
-                                });
-                        }
-                    }
+                if let Some(contexts) = context_to_inject.filter(|contexts| !contexts.is_empty()) {
+                    response.hook_specific_output =
+                        Some(context_output(is_user_prompt_submit, contexts.join("\n")));
                 }
             }
             EngineDecision::Ask { reason } => {
@@ -64,15 +43,8 @@ impl ContextInjectionResponseBuilder {
                 tracing::warn!(
                     "Modify action not supported for context injection events - treating as Allow"
                 );
-                if is_user_prompt_submit {
-                    response.hook_specific_output = Some(HookSpecificOutput::UserPromptSubmit {
-                        additional_context: Some(reason.clone()),
-                    });
-                } else {
-                    response.hook_specific_output = Some(HookSpecificOutput::SessionStart {
-                        additional_context: Some(reason.clone()),
-                    });
-                }
+                response.hook_specific_output =
+                    Some(context_output(is_user_prompt_submit, reason.clone()));
             }
         }
 
@@ -82,6 +54,29 @@ impl ContextInjectionResponseBuilder {
         }
 
         response
+    }
+}
+
+/// Apply a block decision in the format of the event being answered.
+fn apply_block(response: &mut CupcakeResponse, feedback: &str, is_user_prompt_submit: bool) {
+    if is_user_prompt_submit {
+        // UserPromptSubmit Block uses decision: "block" format
+        response.decision = Some("block".to_string());
+        response.reason = Some(feedback.to_string());
+    } else {
+        // SessionStart uses standard continue: false format
+        response.continue_execution = Some(false);
+        response.stop_reason = Some(feedback.to_string());
+    }
+}
+
+/// Wrap `additional_context` in the hook output of the event being answered.
+fn context_output(is_user_prompt_submit: bool, additional_context: String) -> HookSpecificOutput {
+    let additional_context = Some(additional_context);
+    if is_user_prompt_submit {
+        HookSpecificOutput::UserPromptSubmit { additional_context }
+    } else {
+        HookSpecificOutput::SessionStart { additional_context }
     }
 }
 

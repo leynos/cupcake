@@ -78,13 +78,15 @@ impl WatchdogOutput {
 
 impl From<WatchdogInput> for serde_json::Value {
     fn from(input: WatchdogInput) -> Self {
-        serde_json::to_value(input).expect("WatchdogInput serialization should never fail")
+        // Plain strings and JSON values cannot fail to serialize, so the fallback is unreachable.
+        serde_json::to_value(input).unwrap_or_default()
     }
 }
 
 impl From<WatchdogOutput> for serde_json::Value {
     fn from(output: WatchdogOutput) -> Self {
-        serde_json::to_value(output).expect("WatchdogOutput serialization should never fail")
+        // Plain strings and vectors cannot fail to serialize, so the fallback is unreachable.
+        serde_json::to_value(output).unwrap_or_default()
     }
 }
 

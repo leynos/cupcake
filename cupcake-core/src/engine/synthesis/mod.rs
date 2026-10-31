@@ -163,6 +163,14 @@ impl SynthesisEngine {
             .collect()
     }
 
+    /// True when neither the high nor the medium severity group has any decisions.
+    fn no_higher_severity(
+        high_decisions: &[&DecisionObject],
+        medium_decisions: &[&DecisionObject],
+    ) -> bool {
+        high_decisions.is_empty() && medium_decisions.is_empty()
+    }
+
     /// Aggregate multiple decision reasons into a single, clear message
     ///
     /// This handles the case where multiple policies of the same priority
@@ -224,7 +232,8 @@ impl SynthesisEngine {
         }
 
         // Add low severity only if no higher priorities
-        if high_decisions.is_empty() && medium_decisions.is_empty() && !low_decisions.is_empty() {
+        if Self::no_higher_severity(&high_decisions, &medium_decisions) && !low_decisions.is_empty()
+        {
             if low_decisions.len() == 1 {
                 parts.push(low_decisions[0].reason.clone());
             } else {
