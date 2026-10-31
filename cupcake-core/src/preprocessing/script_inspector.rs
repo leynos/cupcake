@@ -3,7 +3,6 @@
 //! This module implements TOB-2 defense by detecting when a shell command
 //! executes a script file and loading its content for policy evaluation.
 
-use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::debug;
 
@@ -21,56 +20,18 @@ impl ScriptInspector {
     /// - `/path/to/script.sh` - Absolute path
     pub fn detect_script_execution(command: &str) -> Option<PathBuf> {
         let parts: Vec<&str> = command.split_whitespace().collect();
-        if parts.is_empty() {
-            return None;
-        }
+        let first = parts.first()?;
 
         // Check for direct script execution (starts with ./ or /)
-        if let Some(first) = parts.first() {
-            if first.starts_with("./") || first.starts_with("/") {
-                // Check if it looks like a script file
-                if is_likely_script(first) {
-                    return Some(PathBuf::from(first));
-                }
-            }
+        if is_direct_script_invocation(first) {
+            return Some(PathBuf::from(first));
         }
 
         // Check for interpreter patterns
         if parts.len() >= 2 {
-            let interpreter = parts[0];
-            let mut script_path = None;
-
-            match interpreter {
-                // Shell interpreters
-                "bash" | "sh" | "zsh" | "fish" | "ksh" | "dash" => {
-                    // Handle flags like: bash -c script.sh or bash -x script.sh
-                    for (i, part) in parts.iter().enumerate().skip(1) {
-                        if !part.starts_with('-') {
-                            script_path = Some(PathBuf::from(part));
-                            break;
-                        } else if *part == "-c" && i + 1 < parts.len() {
-                            // -c means the next arg is a command string, not a file
-                            return None;
-                        }
-                    }
-                }
-                // Scripting language interpreters
-                "python" | "python3" | "python2" | "node" | "ruby" | "perl" | "php" => {
-                    // Find the first non-flag argument
-                    for part in parts.iter().skip(1) {
-                        if !part.starts_with('-') {
-                            script_path = Some(PathBuf::from(part));
-                            break;
-                        }
-                    }
-                }
-                _ => {}
-            }
-
-            if let Some(path) = script_path {
-                if is_likely_script(&path.to_string_lossy()) {
-                    return Some(path);
-                }
+            let path = interpreter_script_arg(&parts)?;
+            if is_likely_script(&path.to_string_lossy()) {
+                return Some(path);
             }
         }
 
@@ -93,7 +54,7 @@ impl ScriptInspector {
 
         debug!("Attempting to load script from: {:?}", resolved_path);
 
-        match fs::read_to_string(&resolved_path) {
+        match crate::fs_access::read_to_string(&resolved_path) {
             Ok(content) => {
                 debug!(
                     "Successfully loaded script: {:?} ({} bytes)",
@@ -141,6 +102,40 @@ impl ScriptInspector {
             debug!("Attached script content to event: {:?}", script_path);
         }
     }
+}
+
+/// Check whether a command's first word runs a script file directly
+fn is_direct_script_invocation(first: &str) -> bool {
+    (first.starts_with("./") || first.starts_with('/')) && is_likely_script(first)
+}
+
+/// Find the script argument of an interpreter command, if there is one
+fn interpreter_script_arg(parts: &[&str]) -> Option<PathBuf> {
+    match parts[0] {
+        // Shell interpreters
+        "bash" | "sh" | "zsh" | "fish" | "ksh" | "dash" => shell_script_arg(parts),
+        // Scripting language interpreters: the first non-flag argument
+        "python" | "python3" | "python2" | "node" | "ruby" | "perl" | "php" => parts
+            .iter()
+            .skip(1)
+            .find(|part| !part.starts_with('-'))
+            .map(PathBuf::from),
+        _ => None,
+    }
+}
+
+/// Find the script argument of a shell command, handling flags like
+/// `bash -x script.sh`. `-c` means the next argument is a command string, not a file.
+fn shell_script_arg(parts: &[&str]) -> Option<PathBuf> {
+    for (i, part) in parts.iter().enumerate().skip(1) {
+        if !part.starts_with('-') {
+            return Some(PathBuf::from(part));
+        }
+        if *part == "-c" && i + 1 < parts.len() {
+            return None;
+        }
+    }
+    None
 }
 
 /// Check if a path is likely a script file based on extension or pattern
@@ -196,6 +191,24 @@ fn is_likely_script(path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_load_script_content_through_a_chain_of_40_symlinks() {
+        let dir = tempfile::tempdir().unwrap();
+        let script = dir.path().join("deploy.sh");
+        crate::fs_access::write(&script, "echo deployed\n").unwrap();
+        let mut previous = script;
+        for index in 1..=40 {
+            let link = dir.path().join(format!("link{index}.sh"));
+            std::os::unix::fs::symlink(&previous, &link).unwrap();
+            previous = link;
+        }
+
+        let content = ScriptInspector::load_script_content(&previous, None);
+
+        assert_eq!(content.as_deref(), Some("echo deployed\n"));
+    }
 
     #[test]
     fn test_detect_direct_script_execution() {

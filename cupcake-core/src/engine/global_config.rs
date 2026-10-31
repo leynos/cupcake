@@ -161,29 +161,30 @@ impl GlobalPaths {
         info!("Initializing global configuration at {:?}", self.root);
 
         // Create directory structure with harness-specific subdirectories
-        std::fs::create_dir_all(&self.root).context("Failed to create global config root")?;
-        std::fs::create_dir_all(&self.policies)
+        crate::fs_access::create_dir_all(&self.root)
+            .context("Failed to create global config root")?;
+        crate::fs_access::create_dir_all(&self.policies)
             .context("Failed to create global policies directory")?;
 
         // Create harness-specific subdirectories for all harnesses
-        std::fs::create_dir_all(self.policies.join("claude").join("system"))
+        crate::fs_access::create_dir_all(self.policies.join("claude").join("system"))
             .context("Failed to create global policies/claude/system directory")?;
-        std::fs::create_dir_all(self.policies.join("claude").join("builtins"))
+        crate::fs_access::create_dir_all(self.policies.join("claude").join("builtins"))
             .context("Failed to create global policies/claude/builtins directory")?;
-        std::fs::create_dir_all(self.policies.join("cursor").join("system"))
+        crate::fs_access::create_dir_all(self.policies.join("cursor").join("system"))
             .context("Failed to create global policies/cursor/system directory")?;
-        std::fs::create_dir_all(self.policies.join("cursor").join("builtins"))
+        crate::fs_access::create_dir_all(self.policies.join("cursor").join("builtins"))
             .context("Failed to create global policies/cursor/builtins directory")?;
-        std::fs::create_dir_all(self.policies.join("factory").join("system"))
+        crate::fs_access::create_dir_all(self.policies.join("factory").join("system"))
             .context("Failed to create global policies/factory/system directory")?;
-        std::fs::create_dir_all(self.policies.join("factory").join("builtins"))
+        crate::fs_access::create_dir_all(self.policies.join("factory").join("builtins"))
             .context("Failed to create global policies/factory/builtins directory")?;
-        std::fs::create_dir_all(self.policies.join("opencode").join("system"))
+        crate::fs_access::create_dir_all(self.policies.join("opencode").join("system"))
             .context("Failed to create global policies/opencode/system directory")?;
-        std::fs::create_dir_all(self.policies.join("opencode").join("builtins"))
+        crate::fs_access::create_dir_all(self.policies.join("opencode").join("builtins"))
             .context("Failed to create global policies/opencode/builtins directory")?;
 
-        std::fs::create_dir_all(&self.signals)
+        crate::fs_access::create_dir_all(&self.signals)
             .context("Failed to create global signals directory")?;
 
         // Create minimal rulebook if it doesn't exist
@@ -199,7 +200,7 @@ signals: {}
 # Builtins can be configured globally
 builtins: {}
 "#;
-            std::fs::write(&self.rulebook, rulebook_content)
+            crate::fs_access::write(&self.rulebook, rulebook_content)
                 .context("Failed to create global rulebook.yml")?;
         }
 
@@ -346,7 +347,7 @@ mod tests {
         assert!(global_paths.rulebook.exists());
 
         // Verify rulebook content
-        let rulebook_content = std::fs::read_to_string(&global_paths.rulebook).unwrap();
+        let rulebook_content = crate::fs_access::read_to_string(&global_paths.rulebook).unwrap();
         assert!(rulebook_content.contains("Global Cupcake Configuration"));
 
         // Note: System evaluate.rego files are created by init_global_config() in main.rs,
