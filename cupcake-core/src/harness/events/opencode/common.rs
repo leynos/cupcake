@@ -1,3 +1,5 @@
+//! Fields common to every OpenCode hook event.
+
 use serde::{Deserialize, Serialize};
 
 /// Common data fields present in all OpenCode events

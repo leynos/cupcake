@@ -1,3 +1,5 @@
+//! Minimal integration test for an `ask` decision.
+
 #![allow(unused_imports)]
 
 use cupcake_core::engine::Engine;

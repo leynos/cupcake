@@ -1,3 +1,5 @@
+//! Response builders that turn engine decisions into each agent's hook response format.
+
 pub mod claude_code;
 pub mod cursor;
 pub mod factory;

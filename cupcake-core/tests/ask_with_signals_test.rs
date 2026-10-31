@@ -1,3 +1,5 @@
+//! Integration tests for `ask` decisions that depend on signal output.
+
 #![allow(unused_imports)]
 
 use cupcake_core::engine::Engine;

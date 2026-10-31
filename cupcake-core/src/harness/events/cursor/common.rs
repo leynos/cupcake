@@ -1,3 +1,5 @@
+//! Fields common to every Cursor hook event.
+
 use serde::{Deserialize, Serialize};
 
 /// Common fields present in all Cursor hook events

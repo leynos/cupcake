@@ -1,3 +1,5 @@
+//! Response builder for the Factory AI `PreToolUse` hook.
+
 use crate::harness::response::types::{
     CupcakeResponse, EngineDecision, HookSpecificOutput, PermissionDecision,
 };

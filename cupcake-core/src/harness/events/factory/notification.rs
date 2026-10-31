@@ -1,3 +1,5 @@
+//! Payload for the Factory AI `Notification` hook event.
+
 use super::CommonFactoryData;
 use serde::{Deserialize, Serialize};
 

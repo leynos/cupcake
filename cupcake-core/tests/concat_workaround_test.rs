@@ -1,3 +1,5 @@
+//! Integration tests for the string concatenation workaround in policy conditions.
+
 #![allow(unused_imports)]
 
 use cupcake_core::engine::Engine;

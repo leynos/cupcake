@@ -1,3 +1,5 @@
+//! Response builder for the Cursor `afterAgentThought` hook.
+
 use crate::harness::response::types::EngineDecision;
 use serde_json::{json, Value};
 

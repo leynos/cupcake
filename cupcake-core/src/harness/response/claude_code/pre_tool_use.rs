@@ -1,3 +1,5 @@
+//! Response builder for the Claude Code `PreToolUse` hook.
+
 use crate::harness::response::types::{
     CupcakeResponse, EngineDecision, HookSpecificOutput, PermissionDecision,
 };

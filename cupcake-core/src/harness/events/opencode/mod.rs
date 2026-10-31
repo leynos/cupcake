@@ -1,3 +1,5 @@
+//! OpenCode hook event payloads and the event enum that tags them.
+
 use serde::{Deserialize, Serialize};
 
 mod common;
