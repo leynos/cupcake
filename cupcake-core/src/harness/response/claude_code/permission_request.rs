@@ -1,3 +1,5 @@
+//! Response builder for the Claude Code `PermissionRequest` hook.
+
 use crate::harness::response::types::{
     CupcakeResponse, EngineDecision, HookSpecificOutput, PermissionRequestBehavior,
     PermissionRequestDecision,

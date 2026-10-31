@@ -1,3 +1,5 @@
+//! Tests for parsing the global builtins section of a rulebook.
+
 #[cfg(test)]
 mod tests {
     use cupcake_core::engine::rulebook::Rulebook;

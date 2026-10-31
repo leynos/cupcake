@@ -1,3 +1,5 @@
+//! Payload for the Claude Code `PreToolUse` hook event.
+
 use super::{CommonEventData, EventPayload};
 use serde::{Deserialize, Serialize};
 

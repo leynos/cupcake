@@ -1,3 +1,5 @@
+//! Response types shared by every harness: the engine decision and the Claude Code response structure.
+
 use serde::{Deserialize, Serialize};
 
 /// The main response structure for Claude Code hooks

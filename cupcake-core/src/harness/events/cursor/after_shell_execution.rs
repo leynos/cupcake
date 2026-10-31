@@ -1,3 +1,5 @@
+//! Payload for the Cursor `afterShellExecution` hook event.
+
 use serde::{Deserialize, Serialize};
 
 use super::common::CommonCursorData;

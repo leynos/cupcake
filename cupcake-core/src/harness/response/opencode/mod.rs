@@ -1,3 +1,5 @@
+//! The OpenCode plugin response and its construction from an engine decision.
+
 use serde::{Deserialize, Serialize};
 
 /// Response from Cupcake to OpenCode plugin
@@ -68,7 +70,8 @@ impl OpenCodeResponse {
 
     /// Convert to JSON value for stdout output
     pub fn to_json_value(&self) -> serde_json::Value {
-        serde_json::to_value(self).expect("OpenCodeResponse should always serialize")
+        // Plain strings and options cannot fail to serialize, so the fallback is unreachable.
+        serde_json::to_value(self).unwrap_or_default()
     }
 }
 

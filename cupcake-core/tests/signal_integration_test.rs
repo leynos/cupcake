@@ -1,3 +1,5 @@
+//! Integration tests for signals feeding policy evaluation.
+
 #![allow(unused_imports)]
 
 use cupcake_core::engine::Engine;

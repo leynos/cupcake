@@ -1,3 +1,5 @@
+//! Integration tests for global builtin policies.
+
 #![allow(unused_imports)]
 #![allow(dead_code)]
 

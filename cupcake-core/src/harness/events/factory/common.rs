@@ -1,3 +1,5 @@
+//! Fields and types common to every Factory AI Droid hook event.
+
 use serde::{Deserialize, Serialize};
 
 /// Permission mode for Factory AI Droid

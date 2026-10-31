@@ -1,3 +1,5 @@
+//! Payload for the Claude Code `SessionStart` hook event.
+
 use super::{CommonEventData, EventPayload, InjectsContext, SessionSource};
 use serde::{Deserialize, Serialize};
 

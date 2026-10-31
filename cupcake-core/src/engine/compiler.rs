@@ -166,7 +166,9 @@ pub async fn compile_policies_with_namespace(
             }
             current = parent.parent();
         }
-        current.unwrap_or_else(|| first_policy_path.parent().unwrap())
+        current
+            .or_else(|| first_policy_path.parent())
+            .context("First policy path has no parent directory")?
     } else {
         bail!("No policies to determine root from");
     };
@@ -209,10 +211,15 @@ pub async fn compile_policies_with_namespace(
 
     for policy in policies.iter() {
         // Get the relative path from the policies root
-        let relative_path = policy
-            .path
-            .strip_prefix(policies_root)
-            .unwrap_or_else(|_| policy.path.file_name().unwrap().as_ref());
+        let relative_path = match policy.path.strip_prefix(policies_root) {
+            Ok(relative) => relative,
+            Err(_) => Path::new(
+                policy
+                    .path
+                    .file_name()
+                    .context("Policy path has no file name")?,
+            ),
+        };
 
         let dest_path = temp_path.join(relative_path);
 

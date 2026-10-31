@@ -1,3 +1,5 @@
+//! Payload for the Factory AI `PostToolUse` hook event.
+
 use super::CommonFactoryData;
 use serde::{Deserialize, Serialize};
 

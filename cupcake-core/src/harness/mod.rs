@@ -1,4 +1,4 @@
-// Place this code in cupcake-rewrite/src/harness/mod.rs
+//! Harness layer: translates agent-specific events and responses to and from the engine.
 
 pub mod events;
 pub mod response;

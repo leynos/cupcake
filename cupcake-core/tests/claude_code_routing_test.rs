@@ -1,3 +1,5 @@
+//! Integration tests for routing Claude Code events to policies.
+
 use serde_json::Value;
 use std::fs;
 use tempfile::TempDir;

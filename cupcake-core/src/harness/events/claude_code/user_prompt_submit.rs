@@ -1,3 +1,5 @@
+//! Payload for the Claude Code `UserPromptSubmit` hook event.
+
 use super::{CommonEventData, EventPayload, InjectsContext};
 use serde::{Deserialize, Serialize};
 
