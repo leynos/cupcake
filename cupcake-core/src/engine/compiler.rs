@@ -9,6 +9,7 @@ use tempfile::TempDir;
 use tracing::{debug, error, info};
 
 use super::PolicyUnit;
+use crate::fs_access;
 
 /// Find the OPA binary with optional CLI override
 ///
@@ -45,45 +46,15 @@ use super::PolicyUnit;
 pub fn find_opa_binary(cli_override: Option<PathBuf>) -> Result<PathBuf> {
     // 1. Check CLI override
     if let Some(opa_path) = cli_override {
-        // Validate the path
-        if !opa_path.exists() {
-            bail!("OPA path does not exist: {}", opa_path.display());
-        }
-
-        if !opa_path.is_file() {
-            bail!("OPA path must be a file: {}", opa_path.display());
-        }
-
-        // Check if file is executable (Unix-like systems only)
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::MetadataExt;
-            let metadata = opa_path
-                .metadata()
-                .context("Failed to read OPA file metadata")?;
-            if metadata.mode() & 0o111 == 0 {
-                bail!("OPA path is not executable: {}", opa_path.display());
-            }
-        }
-
+        validate_opa_override(&opa_path)?;
         debug!("Using CLI --opa-path override: {:?}", opa_path);
         return Ok(opa_path);
     }
 
     // 2. Check if OPA is bundled alongside cupcake binary
-    if let Ok(current_exe) = std::env::current_exe() {
-        if let Some(exe_dir) = current_exe.parent() {
-            let bundled_opa = if cfg!(windows) {
-                exe_dir.join("opa.exe")
-            } else {
-                exe_dir.join("opa")
-            };
-
-            if bundled_opa.exists() {
-                debug!("Using bundled OPA at: {:?}", bundled_opa);
-                return Ok(bundled_opa);
-            }
-        }
+    if let Some(bundled_opa) = bundled_opa_path() {
+        debug!("Using bundled OPA at: {:?}", bundled_opa);
+        return Ok(bundled_opa);
     }
 
     // 3. Fall back to system PATH
@@ -106,6 +77,41 @@ pub fn find_opa_binary(cli_override: Option<PathBuf>) -> Result<PathBuf> {
     } else {
         PathBuf::from("opa")
     })
+}
+
+/// Validate an OPA path given on the command line: it must exist, be a file and,
+/// on Unix-like systems, be executable.
+fn validate_opa_override(opa_path: &Path) -> Result<()> {
+    if !opa_path.exists() {
+        bail!("OPA path does not exist: {}", opa_path.display());
+    }
+
+    if !opa_path.is_file() {
+        bail!("OPA path must be a file: {}", opa_path.display());
+    }
+
+    // Check if file is executable (Unix-like systems only)
+    #[cfg(unix)]
+    {
+        let mode = fs_access::unix_mode(opa_path).context("Failed to read OPA file metadata")?;
+        if mode & 0o111 == 0 {
+            bail!("OPA path is not executable: {}", opa_path.display());
+        }
+    }
+
+    Ok(())
+}
+
+/// The OPA binary bundled alongside the cupcake binary, if there is one.
+fn bundled_opa_path() -> Option<PathBuf> {
+    let current_exe = std::env::current_exe().ok()?;
+    let exe_dir = current_exe.parent()?;
+    let bundled_opa = if cfg!(windows) {
+        exe_dir.join("opa.exe")
+    } else {
+        exe_dir.join("opa")
+    };
+    bundled_opa.exists().then_some(bundled_opa)
 }
 
 /// Compile all policies into a single unified WASM module using OPA
