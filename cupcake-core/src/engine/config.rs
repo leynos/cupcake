@@ -104,11 +104,13 @@ impl ProjectPaths {
 
         // Discover global configuration with optional CLI override
         let global_config =
-            global_config::GlobalPaths::discover_with_override(global_config_override)
-                .unwrap_or_else(|e| {
+            match global_config::GlobalPaths::discover_with_override(global_config_override) {
+                Ok(global_config) => global_config,
+                Err(e) => {
                     debug!("Failed to discover global config: {}", e);
                     None
-                });
+                }
+            };
 
         // Extract global paths if config exists
         let (global_root, global_policies, global_signals, global_rulebook) =

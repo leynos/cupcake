@@ -165,17 +165,21 @@ impl<'a> Executor<'a> {
 
         // Execute signals if we have a rulebook
         let signal_data = if let Some(rulebook) = self.rulebook {
-            self.execute_signals(
-                &signal_names,
-                rulebook,
-                input,
-                signal_telemetry.as_deref_mut(),
-            )
-            .await
-            .unwrap_or_else(|e| {
-                warn!("Signal execution failed: {}", e);
-                HashMap::new()
-            })
+            match self
+                .execute_signals(
+                    &signal_names,
+                    rulebook,
+                    input,
+                    signal_telemetry.as_deref_mut(),
+                )
+                .await
+            {
+                Ok(signal_data) => signal_data,
+                Err(e) => {
+                    warn!("Signal execution failed: {}", e);
+                    HashMap::new()
+                }
+            }
         } else {
             debug!("No rulebook available - no signals collected");
             HashMap::new()
@@ -416,13 +420,16 @@ impl<'a> Executor<'a> {
         info!("Gathering {} global signals", signal_names.len());
 
         // Execute signals using global rulebook
-        let signal_data = self
+        let signal_data = match self
             .execute_signals(&signal_names, rulebook, input, signal_telemetry)
             .await
-            .unwrap_or_else(|e| {
+        {
+            Ok(signal_data) => signal_data,
+            Err(e) => {
                 warn!("Global signal execution failed: {}", e);
                 HashMap::new()
-            });
+            }
+        };
 
         // Merge signal data into enriched input
         if let Some(obj) = enriched_input.as_object_mut() {
