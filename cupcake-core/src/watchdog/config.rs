@@ -346,7 +346,7 @@ impl RulesContext {
 
         for file in &self.files {
             let file_path = root.join(file);
-            match std::fs::read_to_string(&file_path) {
+            match crate::fs_access::read_to_string(&file_path) {
                 Ok(content) => {
                     tracing::debug!("Loaded rules context file: {}", file_path.display());
                     contents.push(format!("=== {file} ===\n{content}"));
@@ -383,7 +383,7 @@ impl WatchdogDirConfig {
             return None;
         }
 
-        match std::fs::read_to_string(&config_path) {
+        match crate::fs_access::read_to_string(&config_path) {
             Ok(content) => match serde_json::from_str(&content) {
                 Ok(config) => Some(config),
                 Err(e) => {

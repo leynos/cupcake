@@ -868,7 +868,7 @@ mod tests {
         let link_path = temp_dir.path().join("link.txt");
 
         // Create target file
-        std::fs::write(&target_path, "test").unwrap();
+        crate::fs_access::write(&target_path, "test").unwrap();
 
         // Create symlink
         symlink(&target_path, &link_path).unwrap();
@@ -905,7 +905,7 @@ mod tests {
         let link_path = temp_dir.path().join("link.txt");
 
         // Create target file
-        std::fs::write(&target_path, "test").unwrap();
+        crate::fs_access::write(&target_path, "test").unwrap();
 
         // Create symlink
         symlink(&target_path, &link_path).unwrap();
@@ -937,7 +937,7 @@ mod tests {
         let link_path = temp_dir.path().join("link.txt");
 
         // Create target and symlink
-        std::fs::write(&target_path, "test").unwrap();
+        crate::fs_access::write(&target_path, "test").unwrap();
         symlink(&target_path, &link_path).unwrap();
 
         let mut input = json!({
@@ -967,7 +967,7 @@ mod tests {
         let file_path = temp_dir.path().join("regular.txt");
 
         // Create regular file (not a symlink)
-        std::fs::write(&file_path, "test").unwrap();
+        crate::fs_access::write(&file_path, "test").unwrap();
 
         let mut input = json!({
             "tool_name": "Read",

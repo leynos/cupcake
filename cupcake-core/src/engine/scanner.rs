@@ -51,16 +51,13 @@ fn scan_directory_recursive_filtered<'a>(
 
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
-            let metadata = match tokio::fs::metadata(&path).await {
-                Ok(m) => m,
-                Err(_) => continue,
-            };
 
-            if metadata.is_dir() {
+            // Entries whose metadata cannot be read are neither directories nor files
+            if path.is_dir() {
                 // Recurse into subdirectories
                 debug!("Scanning subdirectory: {:?}", path);
                 scan_directory_recursive_filtered(&path, files, enabled_builtins).await?;
-            } else if metadata.is_file() {
+            } else if path.is_file() {
                 // Check if it's a .rego file
                 if let Some(extension) = path.extension() {
                     if extension == "rego" {

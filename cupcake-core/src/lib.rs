@@ -3,6 +3,7 @@
 pub mod bindings;
 pub mod debug;
 pub mod engine;
+pub mod fs_access;
 pub mod harness;
 pub mod preprocessing;
 pub mod telemetry;

@@ -10,7 +10,6 @@ use anyhow::Result;
 use chrono::Local;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::path::Path;
 use tracing::info;
 
@@ -73,7 +72,7 @@ impl Engine {
     pub fn dump_routing_diagnostics(&self) -> Result<()> {
         // Create debug directory
         let debug_dir = Path::new(".cupcake/debug/routing");
-        fs::create_dir_all(debug_dir)?;
+        crate::fs_access::create_dir_all(debug_dir)?;
 
         let timestamp = Local::now().format("%Y-%m-%d_%H-%M-%S");
 
@@ -112,7 +111,7 @@ impl Engine {
         };
 
         let json = serde_json::to_string_pretty(&routing_dump)?;
-        fs::write(json_file, json)?;
+        crate::fs_access::write(json_file, json)?;
 
         Ok(())
     }
@@ -135,7 +134,7 @@ impl Engine {
     fn write_text_dump(&self, debug_dir: &Path, timestamp: &impl std::fmt::Display) -> Result<()> {
         let txt_file = debug_dir.join(format!("routing_map_{timestamp}.txt"));
         let readable = self.format_routing_map_human_readable();
-        fs::write(txt_file, readable)?;
+        crate::fs_access::write(txt_file, readable)?;
         Ok(())
     }
 
@@ -281,7 +280,7 @@ impl Engine {
     fn write_dot_graph(&self, debug_dir: &Path, timestamp: &impl std::fmt::Display) -> Result<()> {
         let dot_file = debug_dir.join(format!("routing_map_{timestamp}.dot"));
         let dot_graph = self.generate_routing_graph_dot();
-        fs::write(dot_file, dot_graph)?;
+        crate::fs_access::write(dot_file, dot_graph)?;
         Ok(())
     }
 
