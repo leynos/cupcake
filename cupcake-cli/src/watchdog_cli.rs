@@ -89,6 +89,8 @@ pub async fn run(
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the watchdog command line.
+
     use super::*;
 
     #[test]
