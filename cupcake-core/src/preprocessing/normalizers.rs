@@ -57,14 +57,14 @@ impl WhitespaceNormalizer {
             }
 
             // Handle quotes
-            if ch == '\'' && !in_double_quote && !escape_next {
+            if ch == '\'' && !in_double_quote {
                 in_single_quote = !in_single_quote;
                 result.push(ch);
                 last_was_space = false;
                 continue;
             }
 
-            if ch == '"' && !in_single_quote && !escape_next {
+            if ch == '"' && !in_single_quote {
                 in_double_quote = !in_double_quote;
                 result.push(ch);
                 last_was_space = false;
@@ -126,13 +126,13 @@ impl WhitespaceNormalizer {
                 continue;
             }
 
-            if ch == '\'' && !in_double_quote && !escape_next {
+            if ch == '\'' && !in_double_quote {
                 in_single_quote = !in_single_quote;
                 prev_was_space = false;
                 continue;
             }
 
-            if ch == '"' && !in_single_quote && !escape_next {
+            if ch == '"' && !in_single_quote {
                 in_double_quote = !in_double_quote;
                 prev_was_space = false;
                 continue;
@@ -140,7 +140,7 @@ impl WhitespaceNormalizer {
 
             // Only check outside quotes
             if !in_single_quote && !in_double_quote {
-                if ch == '\t' || ch == '\n' || ch == '\r' {
+                if matches!(ch, '\t' | '\n' | '\r') {
                     return true; // Contains tab or newline
                 }
 

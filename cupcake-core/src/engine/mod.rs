@@ -241,12 +241,13 @@ impl Engine {
         let system_dir = self.paths.cupcake_dir.join("system");
         let system_files = if system_dir.exists() && system_dir.is_dir() {
             info!("Scanning system directory: {:?}", system_dir);
-            scanner::scan_policies(&system_dir)
-                .await
-                .unwrap_or_else(|e| {
+            match scanner::scan_policies(&system_dir).await {
+                Ok(files) => files,
+                Err(e) => {
                     warn!("Failed to scan system directory: {}", e);
                     Vec::new()
-                })
+                }
+            }
         } else {
             debug!("No system directory found at {:?}", system_dir);
             Vec::new()

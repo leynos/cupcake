@@ -79,97 +79,27 @@ pub fn preprocess_input(
     let (tool_name, event_name): (String, String) = match harness {
         HarnessType::ClaudeCode | HarnessType::Factory => {
             // Claude Code and Factory AI use tool_name (same structure)
-            let tool = input
-                .get("tool_name")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown")
-                .to_string();
-            let event = input
-                .get("hook_event_name")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown")
-                .to_string();
-            (tool, event)
+            (
+                string_field_or_unknown(input, "tool_name"),
+                string_field_or_unknown(input, "hook_event_name"),
+            )
         }
         HarnessType::OpenCode => {
-            // OpenCode uses lowercase tool names that need to be mapped to Cupcake format
-            // Clone fields before mutating input
-            let args = input.get("args").cloned();
-            let opencode_result = input.get("result").cloned();
-
-            // Get tool and event as owned strings to avoid borrow issues
-            let tool_lowercase = input
-                .get("tool")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown")
-                .to_string(); // Make it owned
-
-            // Map OpenCode tool names to Cupcake format (bash -> Bash, edit -> Edit, etc.)
-            let tool_mapped = match tool_lowercase.as_str() {
-                "bash" => "Bash".to_string(),
-                "edit" => "Edit".to_string(),
-                "write" => "Write".to_string(),
-                "read" => "Read".to_string(),
-                "grep" => "Grep".to_string(),
-                "glob" => "Glob".to_string(),
-                "list" => "List".to_string(),
-                "patch" => "Patch".to_string(),
-                "todowrite" => "TodoWrite".to_string(),
-                "todoread" => "TodoRead".to_string(),
-                "webfetch" => "WebFetch".to_string(),
-                "task" => "Task".to_string(),
-                _ => tool_lowercase, // Unknown tools pass through
-            };
-
-            // Now we can mutate input
-            if let Some(obj) = input.as_object_mut() {
-                // Add tool_name field for engine compatibility
-                obj.insert(
-                    "tool_name".to_string(),
-                    serde_json::Value::String(tool_mapped),
-                );
-
-                // Add tool_input field by renaming args to tool_input for engine compatibility
-                if let Some(args_value) = args {
-                    obj.insert("tool_input".to_string(), args_value);
-                }
-
-                // Add tool_response field by renaming result to tool_response for PostToolUse events
-                if let Some(opencode_result_value) = opencode_result {
-                    obj.insert("tool_response".to_string(), opencode_result_value);
-                }
-
+            if map_opencode_fields(input) {
                 result.record("opencode_field_mapping");
             }
 
             // Re-read the values we just inserted to get proper string slices
-            let tool = input
-                .get("tool_name")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown")
-                .to_string();
-            let event = input
-                .get("hook_event_name")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown")
-                .to_string();
-            (tool, event)
+            (
+                string_field_or_unknown(input, "tool_name"),
+                string_field_or_unknown(input, "hook_event_name"),
+            )
         }
         HarnessType::Cursor => {
             // Cursor uses hook_event_name to determine the action type
-            let event = input
-                .get("hook_event_name")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown")
-                .to_string();
+            let event = string_field_or_unknown(input, "hook_event_name");
             // For Cursor, we treat certain events as equivalent to tools
-            let tool = match event.as_str() {
-                "beforeShellExecution" => "Bash",
-                "beforeFileEdit" | "afterFileEdit" => "Edit",
-                "beforeFileWrite" | "afterFileWrite" => "Write",
-                _ => "unknown",
-            }
-            .to_string();
+            let tool = cursor_event_tool(&event).to_string();
             (tool, event)
         }
     };
@@ -182,24 +112,21 @@ pub fn preprocess_input(
     );
 
     // Apply tool-specific preprocessing based on the tool type
-    match tool_name.as_str() {
-        "Bash" if config.normalize_whitespace => {
-            let applied = match harness {
-                HarnessType::ClaudeCode => preprocess_claude_bash_command(input, config),
-                HarnessType::Factory => preprocess_claude_bash_command(input, config),
-                HarnessType::Cursor => preprocess_cursor_shell_command(input, config),
-                HarnessType::OpenCode => preprocess_claude_bash_command(input, config), // Same format as Claude/Factory
-            };
-            if applied {
-                result.record("whitespace_normalization");
-            }
+    if tool_name == "Bash" && config.normalize_whitespace {
+        let applied = match harness {
+            HarnessType::ClaudeCode => preprocess_claude_bash_command(input, config),
+            HarnessType::Factory => preprocess_claude_bash_command(input, config),
+            HarnessType::Cursor => preprocess_cursor_shell_command(input, config),
+            HarnessType::OpenCode => preprocess_claude_bash_command(input, config), // Same format as Claude/Factory
+        };
+        if applied {
+            result.record("whitespace_normalization");
         }
+    } else {
         // Future: Add other tool-specific preprocessing
         // "Task" => preprocess_task_prompt(input, config),
         // "WebFetch" => preprocess_url(input, config),
-        _ => {
-            trace!("No preprocessing rules for tool: {}", tool_name);
-        }
+        trace!("No preprocessing rules for tool: {}", tool_name);
     }
 
     // ==========================================================================
@@ -249,6 +176,75 @@ pub fn preprocess_input(
     // }
 
     result
+}
+
+/// Read a string field from `input`, or `"unknown"` when absent or not a string.
+fn string_field_or_unknown(input: &Value, key: &str) -> String {
+    input
+        .get(key)
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown")
+        .to_string()
+}
+
+/// Map OpenCode's lowercase tool names to Cupcake format (bash -> Bash, edit -> Edit, etc.).
+fn map_opencode_tool(tool_lowercase: String) -> String {
+    match tool_lowercase.as_str() {
+        "bash" => "Bash".to_string(),
+        "edit" => "Edit".to_string(),
+        "write" => "Write".to_string(),
+        "read" => "Read".to_string(),
+        "grep" => "Grep".to_string(),
+        "glob" => "Glob".to_string(),
+        "list" => "List".to_string(),
+        "patch" => "Patch".to_string(),
+        "todowrite" => "TodoWrite".to_string(),
+        "todoread" => "TodoRead".to_string(),
+        "webfetch" => "WebFetch".to_string(),
+        "task" => "Task".to_string(),
+        _ => tool_lowercase, // Unknown tools pass through
+    }
+}
+
+/// Add the engine-compatible `tool_name`, `tool_input` and `tool_response` fields to an
+/// OpenCode event. Returns true if the event was an object and the fields were mapped.
+fn map_opencode_fields(input: &mut Value) -> bool {
+    // Clone fields before mutating input
+    let args = input.get("args").cloned();
+    let opencode_result = input.get("result").cloned();
+    let tool_mapped = map_opencode_tool(string_field_or_unknown(input, "tool"));
+
+    let Some(obj) = input.as_object_mut() else {
+        return false;
+    };
+
+    // Add tool_name field for engine compatibility
+    obj.insert(
+        "tool_name".to_string(),
+        serde_json::Value::String(tool_mapped),
+    );
+
+    // Add tool_input field by renaming args to tool_input for engine compatibility
+    if let Some(args_value) = args {
+        obj.insert("tool_input".to_string(), args_value);
+    }
+
+    // Add tool_response field by renaming result to tool_response for PostToolUse events
+    if let Some(opencode_result_value) = opencode_result {
+        obj.insert("tool_response".to_string(), opencode_result_value);
+    }
+
+    true
+}
+
+/// The tool a Cursor hook event is treated as equivalent to.
+fn cursor_event_tool(event: &str) -> &'static str {
+    match event {
+        "beforeShellExecution" => "Bash",
+        "beforeFileEdit" | "afterFileEdit" => "Edit",
+        "beforeFileWrite" | "afterFileWrite" => "Write",
+        _ => "unknown",
+    }
 }
 
 /// Normalize content fields between Write and Edit tools for unified policy access
@@ -354,38 +350,37 @@ fn preprocess_claude_bash_command(input: &mut Value, config: &PreprocessConfig) 
 /// Preprocess Cursor shell commands to normalize whitespace and inspect scripts
 /// Returns true if whitespace normalization was actually applied
 fn preprocess_cursor_shell_command(input: &mut Value, config: &PreprocessConfig) -> bool {
-    let mut applied = false;
-
     // Navigate to command (Cursor structure - command is at root level)
-    if let Some(command_value) = input.get_mut("command") {
-        if let Some(command) = command_value.as_str() {
-            let original = command.to_string();
-            let mut normalized = WhitespaceNormalizer::normalize_command(&original);
+    let Some(original) = input
+        .get("command")
+        .and_then(|command| command.as_str())
+        .map(str::to_string)
+    else {
+        return false;
+    };
 
-            // Only update if changed
-            if original != normalized {
-                *command_value = Value::String(normalized.clone());
-                applied = true;
+    let normalized = WhitespaceNormalizer::normalize_command(&original);
 
-                if config.audit_transformations {
-                    debug!(
-                        "Normalized Cursor shell command: '{}' → '{}'",
-                        original, normalized
-                    );
-                }
-            } else {
-                normalized = original;
-            }
+    // Only update if changed
+    let applied = original != normalized;
+    if applied {
+        input["command"] = Value::String(normalized.clone());
 
-            // Check for script execution if enabled
-            if config.enable_script_inspection {
-                inspect_and_attach_script(input, &normalized);
-            }
-
-            // Extract affected parent directories for destructive commands
-            extract_and_attach_affected_directories(input, &normalized);
+        if config.audit_transformations {
+            debug!(
+                "Normalized Cursor shell command: '{}' → '{}'",
+                original, normalized
+            );
         }
     }
+
+    // Check for script execution if enabled
+    if config.enable_script_inspection {
+        inspect_and_attach_script(input, &normalized);
+    }
+
+    // Extract affected parent directories for destructive commands
+    extract_and_attach_affected_directories(input, &normalized);
 
     applied
 }

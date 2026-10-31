@@ -34,29 +34,7 @@ impl FeedbackLoopResponseBuilder {
                         "Modify action not supported for feedback loop events - treating as Allow"
                     );
                 }
-                // Only PostToolUse supports context injection
-                match hook_event {
-                    FactoryEvent::PostToolUse(_) => {
-                        if let Some(contexts) = context_to_inject {
-                            if !contexts.is_empty() {
-                                response.hook_specific_output =
-                                    Some(HookSpecificOutput::PostToolUse {
-                                        additional_context: Some(contexts.join("\n")),
-                                    });
-                            }
-                        }
-                    }
-                    FactoryEvent::Stop(_) | FactoryEvent::SubagentStop(_) => {
-                        // These events don't support context injection
-                    }
-                    _ => {
-                        // This builder should only be called for feedback loop events
-                        unreachable!(
-                            "FeedbackLoopResponseBuilder called with non-feedback-loop event: {}",
-                            hook_event.event_name()
-                        )
-                    }
-                }
+                response.hook_specific_output = post_tool_use_output(hook_event, context_to_inject);
             }
         }
 
@@ -66,6 +44,31 @@ impl FeedbackLoopResponseBuilder {
         }
 
         response
+    }
+}
+
+/// Context injection output for `hook_event`. Only PostToolUse supports it.
+fn post_tool_use_output(
+    hook_event: &FactoryEvent,
+    context_to_inject: Option<Vec<String>>,
+) -> Option<HookSpecificOutput> {
+    match hook_event {
+        FactoryEvent::PostToolUse(_) => context_to_inject
+            .filter(|contexts| !contexts.is_empty())
+            .map(|contexts| HookSpecificOutput::PostToolUse {
+                additional_context: Some(contexts.join("\n")),
+            }),
+        FactoryEvent::Stop(_) | FactoryEvent::SubagentStop(_) => {
+            // These events don't support context injection
+            None
+        }
+        _ => {
+            // This builder should only be called for feedback loop events
+            unreachable!(
+                "FeedbackLoopResponseBuilder called with non-feedback-loop event: {}",
+                hook_event.event_name()
+            )
+        }
     }
 }
 
