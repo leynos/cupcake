@@ -125,6 +125,21 @@ pub fn read_dir(path: impl AsRef<Path>) -> io::Result<Vec<PathBuf>> {
         .collect()
 }
 
+/// Read the Unix mode bits of the file or directory at `path`, following
+/// symlinks as `std::fs::metadata` does.
+///
+/// # Errors
+///
+/// Returns the I/O error when the parent directory cannot be opened or the path
+/// cannot be inspected.
+#[cfg(unix)]
+pub fn unix_mode(path: impl AsRef<Path>) -> io::Result<u32> {
+    use cap_std::fs::PermissionsExt;
+
+    let (dir, name) = open_parent(path.as_ref())?;
+    Ok(dir.metadata(&name)?.permissions().mode())
+}
+
 #[cfg(test)]
 mod tests {
     //! Tests for the capability-based file helpers.
@@ -303,5 +318,33 @@ mod tests {
         assert!(error
             .to_string()
             .contains("too many levels of symbolic links"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_unix_mode_of_a_file_is_read_through_a_symlink() {
+        use cap_std::ambient_authority;
+        use cap_std::fs::{Dir, Permissions, PermissionsExt};
+
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let tool = dir.path().join("tool");
+        let link = dir.path().join("link");
+        write(&tool, "#!/bin/sh\n").expect("write tool");
+        Dir::open_ambient_dir(dir.path(), ambient_authority())
+            .and_then(|root| root.set_permissions("tool", Permissions::from_mode(0o750)))
+            .expect("set mode");
+        std::os::unix::fs::symlink(&tool, &link).expect("symlink");
+
+        assert_eq!(super::unix_mode(&tool).expect("mode") & 0o777, 0o750);
+        assert_eq!(
+            super::unix_mode(&link).expect("mode via link") & 0o777,
+            0o750
+        );
+        assert_eq!(
+            super::unix_mode(dir.path().join("absent"))
+                .expect_err("absent")
+                .kind(),
+            ErrorKind::NotFound
+        );
     }
 }
