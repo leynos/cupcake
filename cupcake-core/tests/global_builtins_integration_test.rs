@@ -8,19 +8,15 @@ mod common;
 use common::{create_test_project_for_harness, init_test_logging};
 
 #[cfg(test)]
-mod tests {
-    //! Integration tests for global builtin policies.
+mod support {
+    //! Fixtures for the global builtin policy tests.
 
     use anyhow::Result;
-    use cupcake_core::engine::Engine;
     use cupcake_core::fs_access;
-    use serde_json::json;
-    use serial_test::serial;
     use std::path::Path;
-    use tempfile::TempDir;
 
     /// Helper to create a test global configuration with test policies
-    fn setup_test_global_config(global_dir: &Path) -> Result<()> {
+    pub fn setup_test_global_config(global_dir: &Path) -> Result<()> {
         let policies_dir = global_dir.join("policies");
         // Use Claude harness-specific directory
         let claude_dir = policies_dir.join("claude");
@@ -116,6 +112,19 @@ builtins: {}
 
         Ok(())
     }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Integration tests for global builtin policies.
+
+    use super::support::setup_test_global_config;
+    use anyhow::Result;
+    use cupcake_core::engine::Engine;
+    use cupcake_core::fs_access;
+    use serde_json::json;
+    use serial_test::serial;
+    use tempfile::TempDir;
 
     #[tokio::test]
     #[serial]
@@ -396,6 +405,18 @@ builtins:
 
         Ok(())
     }
+}
+
+#[cfg(test)]
+mod signal_tests {
+    //! Integration test for the signals that global builtins generate.
+
+    use anyhow::Result;
+    use cupcake_core::engine::Engine;
+    use cupcake_core::fs_access;
+    use serde_json::json;
+    use serial_test::serial;
+    use tempfile::TempDir;
 
     #[tokio::test]
     #[serial]
