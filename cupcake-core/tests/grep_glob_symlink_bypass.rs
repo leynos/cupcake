@@ -6,9 +6,9 @@
 use anyhow::Result;
 use cupcake_core::engine::decision::FinalDecision;
 use cupcake_core::engine::{Engine, EngineConfig};
+use cupcake_core::fs_access;
 use cupcake_core::harness::types::HarnessType;
 use serde_json::json;
-use std::fs;
 use tempfile::TempDir;
 
 #[cfg(unix)]
@@ -30,20 +30,20 @@ async fn setup_test_project_with_guardrails(
     let builtins_dir = claude_dir.join("builtins");
     let shared_system_dir = cupcake_dir.join("system");
 
-    fs::create_dir_all(&builtins_dir)?;
-    fs::create_dir_all(&shared_system_dir)?;
+    fs_access::create_dir_all(&builtins_dir)?;
+    fs_access::create_dir_all(&shared_system_dir)?;
 
     // Add the rulebook_security_guardrails builtin policy
     let rulebook_policy =
         include_str!("../../fixtures/claude/builtins/rulebook_security_guardrails.rego");
-    fs::write(
+    fs_access::write(
         builtins_dir.join("rulebook_security_guardrails.rego"),
         rulebook_policy,
     )?;
 
     // Add helper library that rulebook policy uses
     let helpers_commands = include_str!("../../fixtures/system/commands.rego");
-    fs::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
+    fs_access::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
 
     // Enable the builtin in rulebook.yml
     let rulebook_content = r#"
@@ -51,7 +51,7 @@ builtins:
   rulebook_security_guardrails:
     enabled: true
 "#;
-    fs::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
+    fs_access::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
 
     // Create empty global config to prevent interference
     let empty_global = TempDir::new()?;
@@ -88,8 +88,8 @@ async fn test_grep_symlink_bypass_should_block() -> Result<()> {
 
     // Create .cupcake directory with a secret file
     let cupcake_dir = project_dir.join(".cupcake");
-    fs::create_dir_all(&cupcake_dir)?;
-    fs::write(
+    fs_access::create_dir_all(&cupcake_dir)?;
+    fs_access::write(
         cupcake_dir.join("secret.rego"),
         "package secret\nsecret := true",
     )?;
@@ -175,8 +175,8 @@ async fn test_glob_innocent_pattern_symlink_directory_vulnerable() -> Result<()>
 
     // Create .cupcake directory
     let cupcake_dir = project_dir.join(".cupcake");
-    fs::create_dir_all(&cupcake_dir)?;
-    fs::write(cupcake_dir.join("secret.rego"), "secret")?;
+    fs_access::create_dir_all(&cupcake_dir)?;
+    fs_access::write(cupcake_dir.join("secret.rego"), "secret")?;
 
     // Create symlink with innocent name
     let symlink_path = project_dir.join("backup");
@@ -223,7 +223,7 @@ async fn test_glob_wildcard_pattern_finds_symlinks_vulnerable() -> Result<()> {
 
     // Create .cupcake directory
     let cupcake_dir = project_dir.join(".cupcake");
-    fs::create_dir_all(&cupcake_dir)?;
+    fs_access::create_dir_all(&cupcake_dir)?;
 
     // Create symlink
     let symlink_path = project_dir.join("innocent_name");
@@ -264,8 +264,8 @@ async fn test_grep_legitimate_usage_allowed() -> Result<()> {
 
     // Create a normal src directory
     let src_dir = project_dir.join("src");
-    fs::create_dir_all(&src_dir)?;
-    fs::write(src_dir.join("main.rs"), "fn main() {}")?;
+    fs_access::create_dir_all(&src_dir)?;
+    fs_access::write(src_dir.join("main.rs"), "fn main() {}")?;
 
     // Grep in normal directory
     let event = json!({
@@ -303,8 +303,8 @@ async fn test_glob_legitimate_usage_allowed() -> Result<()> {
 
     // Create normal project structure
     let src_dir = project_dir.join("src");
-    fs::create_dir_all(&src_dir)?;
-    fs::write(src_dir.join("lib.rs"), "pub fn test() {}")?;
+    fs_access::create_dir_all(&src_dir)?;
+    fs_access::write(src_dir.join("lib.rs"), "pub fn test() {}")?;
 
     // Glob for Rust files
     let event = json!({
