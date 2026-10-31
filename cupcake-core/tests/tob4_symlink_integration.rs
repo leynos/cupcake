@@ -23,10 +23,10 @@
 //! - Handle permission errors gracefully with skip messages
 //! - Consider using `#[cfg(not(windows))]` if symlink tests prove unreliable in CI
 
+use cupcake_core::fs_access;
 use cupcake_core::harness::types::HarnessType;
 use cupcake_core::preprocessing::{preprocess_input, PreprocessConfig};
 use serde_json::json;
-use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::symlink;
 #[cfg(windows)]
@@ -41,10 +41,10 @@ fn test_tob4_cupcake_symlink_bypass_blocked() {
     // Create .cupcake directory with a policy file
     let cupcake_dir = temp_dir.path().join(".cupcake");
     let policies_dir = cupcake_dir.join("policies");
-    fs::create_dir_all(&policies_dir).unwrap();
+    fs_access::create_dir_all(&policies_dir).unwrap();
 
     let policy_file = policies_dir.join("test.rego");
-    fs::write(&policy_file, "package test").unwrap();
+    fs_access::write(&policy_file, "package test").unwrap();
 
     // Create symlink directly to the policy FILE (not directory)
     // This is the attack: symlink to a protected file with an innocent name
@@ -91,10 +91,10 @@ fn test_tob4_protected_paths_symlink_bypass_blocked() {
 
     // Create a protected directory
     let protected_dir = temp_dir.path().join("protected");
-    fs::create_dir_all(&protected_dir).unwrap();
+    fs_access::create_dir_all(&protected_dir).unwrap();
 
     let protected_file = protected_dir.join("important.txt");
-    fs::write(&protected_file, "important data").unwrap();
+    fs_access::write(&protected_file, "important data").unwrap();
 
     // Create symlink to protected file
     let symlink_path = temp_dir.path().join("safe.txt");
@@ -133,10 +133,10 @@ fn test_tob4_system_protection_symlink_detection() {
 
     // Create a fake system file (we can't actually create /etc/passwd symlink in tests)
     let fake_etc = temp_dir.path().join("fake_etc");
-    fs::create_dir_all(&fake_etc).unwrap();
+    fs_access::create_dir_all(&fake_etc).unwrap();
 
     let fake_passwd = fake_etc.join("passwd");
-    fs::write(&fake_passwd, "root:x:0:0:root:/root:/bin/bash").unwrap();
+    fs_access::write(&fake_passwd, "root:x:0:0:root:/root:/bin/bash").unwrap();
 
     // Create symlink to fake system file
     let symlink_path = temp_dir.path().join("myfile.txt");
@@ -174,7 +174,7 @@ fn test_tob4_sensitive_data_symlink_detection() {
 
     // Create a fake .env file
     let env_file = temp_dir.path().join(".env");
-    fs::write(&env_file, "API_KEY=secret123\nDB_PASSWORD=password456").unwrap();
+    fs_access::write(&env_file, "API_KEY=secret123\nDB_PASSWORD=password456").unwrap();
 
     // Create symlink to .env file
     let symlink_path = temp_dir.path().join("config.txt");
@@ -264,7 +264,7 @@ fn test_tob4_regular_file_not_flagged() {
 
     // Create a regular file (not a symlink)
     let regular_file = temp_dir.path().join("regular.txt");
-    fs::write(&regular_file, "test content").unwrap();
+    fs_access::write(&regular_file, "test content").unwrap();
 
     let mut event = json!({
         "hook_event_name": "PreToolUse",
@@ -306,7 +306,7 @@ fn test_tob4_can_be_disabled() {
 
     // Create symlink
     let target = temp_dir.path().join("target.txt");
-    fs::write(&target, "test").unwrap();
+    fs_access::write(&target, "test").unwrap();
 
     let symlink_path = temp_dir.path().join("link.txt");
     symlink(&target, &symlink_path).unwrap();
@@ -338,9 +338,9 @@ fn test_tob4_cursor_harness() {
 
     // Create a file inside .cupcake
     let cupcake_dir = temp_dir.path().join(".cupcake");
-    fs::create_dir_all(&cupcake_dir).unwrap();
+    fs_access::create_dir_all(&cupcake_dir).unwrap();
     let target_file = cupcake_dir.join("test.txt");
-    fs::write(&target_file, "test").unwrap();
+    fs_access::write(&target_file, "test").unwrap();
 
     // Create symlink directly to the FILE
     let symlink_path = temp_dir.path().join("safe.txt");

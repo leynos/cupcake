@@ -2,8 +2,8 @@
 
 use anyhow::Result;
 use cupcake_core::engine::{global_config::GlobalPaths, Engine};
+use cupcake_core::fs_access;
 use serial_test::serial;
-use std::fs;
 use tempfile::TempDir;
 
 mod common;
@@ -66,7 +66,7 @@ async fn test_engine_with_global_config() -> Result<()> {
     common::create_test_global_config(&global_paths.root)?;
 
     // Create a simple global policy
-    fs::write(
+    fs_access::write(
         global_paths.policies.join("claude/test_global.rego"),
         r#"package cupcake.global.policies.test
 
@@ -121,7 +121,7 @@ async fn test_namespace_isolation() -> Result<()> {
     common::create_test_global_config(&global_paths.root)?;
 
     // Create conflicting global policy (same name but global namespace)
-    fs::write(
+    fs_access::write(
         global_paths.policies.join("claude/conflict.rego"),
         r#"package cupcake.global.policies.conflict
 
@@ -139,7 +139,7 @@ test_value := "global"
     )?;
 
     // Create conflicting project policy (same base name but project namespace)
-    fs::write(
+    fs_access::write(
         project_dir
             .path()
             .join(".cupcake/policies/claude/conflict.rego"),
