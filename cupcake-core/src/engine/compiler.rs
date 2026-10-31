@@ -57,11 +57,11 @@ pub fn find_opa_binary(cli_override: Option<PathBuf>) -> Result<PathBuf> {
         // Check if file is executable (Unix-like systems only)
         #[cfg(unix)]
         {
-            use std::os::unix::fs::PermissionsExt;
-            let metadata =
-                std::fs::metadata(&opa_path).context("Failed to read OPA file metadata")?;
-            let permissions = metadata.permissions();
-            if permissions.mode() & 0o111 == 0 {
+            use std::os::unix::fs::MetadataExt;
+            let metadata = opa_path
+                .metadata()
+                .context("Failed to read OPA file metadata")?;
+            if metadata.mode() & 0o111 == 0 {
                 bail!("OPA path is not executable: {}", opa_path.display());
             }
         }

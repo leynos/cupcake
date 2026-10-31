@@ -1,0 +1,14 @@
+# Whitaker lint configuration.
+#
+# `no_std_fs_operations` enforces capability-based filesystem access. Where an
+# exclusion is genuinely warranted, `excluded_paths` exempts one module and its
+# descendants, which is narrower than `excluded_crates` exempting a whole
+# compilation unit.
+[no_std_fs_operations]
+excluded_paths = [
+    # Ambient boundary for the TOB-4 symlink resolver. It canonicalizes and
+    # reads links for arbitrary caller-supplied paths, and `cap-std` refuses any
+    # symlink whose target is absolute or leaves the opened directory, so these
+    # three probes cannot be capability-scoped. See the module documentation.
+    "cupcake_core::ambient_fs",
+]

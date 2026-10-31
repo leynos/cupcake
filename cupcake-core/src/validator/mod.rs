@@ -90,7 +90,7 @@ impl PolicyContent {
     /// Create PolicyContent from file path
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
-        let content = std::fs::read_to_string(&path)?;
+        let content = crate::fs_access::read_to_string(&path)?;
         Self::from_content(path, content)
     }
 
@@ -127,7 +127,7 @@ impl PolicyContent {
 
     /// Write content back to file
     pub fn write_to_file(&self) -> Result<()> {
-        std::fs::write(&self.path, &self.content)?;
+        crate::fs_access::write(&self.path, &self.content)?;
         Ok(())
     }
 }

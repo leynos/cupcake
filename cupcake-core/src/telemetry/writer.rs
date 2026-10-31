@@ -6,7 +6,6 @@
 
 use anyhow::Result;
 use chrono::{DateTime, Local};
-use std::fs;
 use std::path::Path;
 
 use crate::engine::rulebook::TelemetryFormat;
@@ -20,7 +19,7 @@ impl TelemetryWriter {
     /// Write telemetry to debug file in .cupcake/debug/.
     pub fn write_debug_file(span: &CupcakeSpan, debug_dir: &Path) -> Result<()> {
         if !debug_dir.exists() {
-            fs::create_dir_all(debug_dir)?;
+            crate::fs_access::create_dir_all(debug_dir)?;
         }
 
         let datetime: DateTime<Local> = span.timestamp.into();
@@ -33,7 +32,7 @@ impl TelemetryWriter {
         let file_path = debug_dir.join(filename);
         let content = Self::format_human_readable(span)?;
 
-        fs::write(file_path, content)?;
+        crate::fs_access::write(file_path, content)?;
         Ok(())
     }
 
@@ -44,7 +43,7 @@ impl TelemetryWriter {
         destination: &Path,
     ) -> Result<()> {
         if !destination.exists() {
-            fs::create_dir_all(destination)?;
+            crate::fs_access::create_dir_all(destination)?;
         }
 
         let datetime: DateTime<Local> = span.timestamp.into();
@@ -66,7 +65,7 @@ impl TelemetryWriter {
             TelemetryFormat::Text => Self::format_human_readable(span)?,
         };
 
-        fs::write(file_path, content)?;
+        crate::fs_access::write(file_path, content)?;
         Ok(())
     }
 
@@ -235,6 +234,7 @@ impl TelemetryWriter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fs_access;
     use crate::harness::types::HarnessType;
     use crate::telemetry::{EnrichPhase, PolicyPhase, SignalExecution, SignalsPhase};
     use serde_json::json;
@@ -286,13 +286,10 @@ mod tests {
 
         TelemetryWriter::write_debug_file(&span, dir.path()).unwrap();
 
-        let files: Vec<_> = fs::read_dir(dir.path())
-            .unwrap()
-            .filter_map(|e| e.ok())
-            .collect();
+        let files = fs_access::read_dir(dir.path()).unwrap();
         assert_eq!(files.len(), 1);
 
-        let content = fs::read_to_string(files[0].path()).unwrap();
+        let content = fs_access::read_to_string(&files[0]).unwrap();
         assert!(content.contains("Cupcake Trace"));
         assert!(content.contains("test-trace"));
         assert!(content.contains("git_status"));
@@ -305,14 +302,14 @@ mod tests {
 
         TelemetryWriter::write_telemetry(&span, &TelemetryFormat::Json, dir.path()).unwrap();
 
-        let files: Vec<_> = fs::read_dir(dir.path())
+        let files: Vec<_> = fs_access::read_dir(dir.path())
             .unwrap()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().map(|s| s == "json").unwrap_or(false))
+            .into_iter()
+            .filter(|path| path.extension().map(|s| s == "json").unwrap_or(false))
             .collect();
         assert_eq!(files.len(), 1);
 
-        let content = fs::read_to_string(files[0].path()).unwrap();
+        let content = fs_access::read_to_string(&files[0]).unwrap();
         let _: serde_json::Value = serde_json::from_str(&content).unwrap();
     }
 

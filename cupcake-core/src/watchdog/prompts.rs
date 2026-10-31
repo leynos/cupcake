@@ -121,39 +121,30 @@ impl WatchdogPrompts {
         project_dir: Option<&Path>,
         global_dir: Option<&Path>,
     ) -> Option<String> {
-        // Try project first
-        if let Some(dir) = project_dir {
-            let path = dir.join(filename);
-            if path.exists() {
-                match std::fs::read_to_string(&path) {
-                    Ok(content) => {
-                        debug!("Loaded {} from {}", filename, path.display());
-                        return Some(content);
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to read {}: {}", path.display(), e);
-                    }
-                }
-            }
+        // Try project first, then global
+        [project_dir, global_dir]
+            .into_iter()
+            .flatten()
+            .find_map(|dir| Self::read_file(dir, filename))
+    }
+
+    /// Read `filename` from `dir` if it exists and is readable
+    fn read_file(dir: &Path, filename: &str) -> Option<String> {
+        let path = dir.join(filename);
+        if !path.exists() {
+            return None;
         }
 
-        // Try global
-        if let Some(dir) = global_dir {
-            let path = dir.join(filename);
-            if path.exists() {
-                match std::fs::read_to_string(&path) {
-                    Ok(content) => {
-                        debug!("Loaded {} from {}", filename, path.display());
-                        return Some(content);
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to read {}: {}", path.display(), e);
-                    }
-                }
+        match crate::fs_access::read_to_string(&path) {
+            Ok(content) => {
+                debug!("Loaded {} from {}", filename, path.display());
+                Some(content)
+            }
+            Err(e) => {
+                tracing::warn!("Failed to read {}: {}", path.display(), e);
+                None
             }
         }
-
-        None
     }
 
     /// Render the user message by replacing template placeholders
@@ -174,7 +165,7 @@ impl WatchdogPrompts {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
+    use crate::fs_access;
     use tempfile::TempDir;
 
     #[test]
@@ -190,10 +181,10 @@ mod tests {
     fn test_load_from_project_dir() {
         let temp = TempDir::new().unwrap();
         let watchdog_dir = temp.path().join("watchdog");
-        fs::create_dir_all(&watchdog_dir).unwrap();
+        fs_access::create_dir_all(&watchdog_dir).unwrap();
 
-        fs::write(watchdog_dir.join("system.txt"), "Custom system prompt").unwrap();
-        fs::write(watchdog_dir.join("user.txt"), "Event: {{event}}").unwrap();
+        fs_access::write(watchdog_dir.join("system.txt"), "Custom system prompt").unwrap();
+        fs_access::write(watchdog_dir.join("user.txt"), "Event: {{event}}").unwrap();
 
         let prompts = WatchdogPrompts::load(Some(&watchdog_dir), None).unwrap();
         assert_eq!(prompts.system_prompt, "Custom system prompt");
@@ -208,13 +199,13 @@ mod tests {
         let project_dir = project_temp.path().join("watchdog");
         let global_dir = global_temp.path().join("watchdog");
 
-        fs::create_dir_all(&project_dir).unwrap();
-        fs::create_dir_all(&global_dir).unwrap();
+        fs_access::create_dir_all(&project_dir).unwrap();
+        fs_access::create_dir_all(&global_dir).unwrap();
 
         // Only system.txt in project
-        fs::write(project_dir.join("system.txt"), "Project system").unwrap();
+        fs_access::write(project_dir.join("system.txt"), "Project system").unwrap();
         // Only user.txt in global
-        fs::write(global_dir.join("user.txt"), "Global user: {{event}}").unwrap();
+        fs_access::write(global_dir.join("user.txt"), "Global user: {{event}}").unwrap();
 
         let prompts = WatchdogPrompts::load(Some(&project_dir), Some(&global_dir)).unwrap();
         assert_eq!(prompts.system_prompt, "Project system");
@@ -280,11 +271,11 @@ mod tests {
     fn test_load_with_rules_context() {
         let temp = TempDir::new().unwrap();
         let watchdog_dir = temp.path().join(".cupcake").join("watchdog");
-        fs::create_dir_all(&watchdog_dir).unwrap();
+        fs_access::create_dir_all(&watchdog_dir).unwrap();
 
         // Create a rules file at project root (../../ from watchdog dir)
         let rules_file = temp.path().join("CLAUDE.md");
-        fs::write(&rules_file, "# Project Rules\nDo not delete files.").unwrap();
+        fs_access::write(&rules_file, "# Project Rules\nDo not delete files.").unwrap();
 
         let rules_context = RulesContext {
             root_path: "../..".to_string(),
@@ -308,7 +299,7 @@ mod tests {
     fn test_load_with_empty_rules_context() {
         let temp = TempDir::new().unwrap();
         let watchdog_dir = temp.path().join(".cupcake").join("watchdog");
-        fs::create_dir_all(&watchdog_dir).unwrap();
+        fs_access::create_dir_all(&watchdog_dir).unwrap();
 
         let rules_context = RulesContext {
             root_path: "../..".to_string(),
@@ -330,7 +321,7 @@ mod tests {
     fn test_load_with_missing_rules_file_strict_fails() {
         let temp = TempDir::new().unwrap();
         let watchdog_dir = temp.path().join(".cupcake").join("watchdog");
-        fs::create_dir_all(&watchdog_dir).unwrap();
+        fs_access::create_dir_all(&watchdog_dir).unwrap();
 
         let rules_context = RulesContext {
             root_path: "../..".to_string(),
@@ -354,7 +345,7 @@ mod tests {
     fn test_load_with_missing_rules_file_non_strict_succeeds() {
         let temp = TempDir::new().unwrap();
         let watchdog_dir = temp.path().join(".cupcake").join("watchdog");
-        fs::create_dir_all(&watchdog_dir).unwrap();
+        fs_access::create_dir_all(&watchdog_dir).unwrap();
 
         let rules_context = RulesContext {
             root_path: "../..".to_string(),
