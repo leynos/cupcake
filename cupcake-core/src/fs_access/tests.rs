@@ -1,4 +1,3 @@
-
 //! Tests for the capability-based file helpers.
 
 use std::io::ErrorKind;
