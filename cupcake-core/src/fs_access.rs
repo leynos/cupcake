@@ -140,5 +140,42 @@ pub fn unix_mode(path: impl AsRef<Path>) -> io::Result<u32> {
     Ok(dir.metadata(&name)?.permissions().mode())
 }
 
+/// Remove the file at `path`. A symlink is removed, not the file it points at.
+///
+/// # Errors
+///
+/// Returns the I/O error when the parent directory cannot be opened or the file
+/// cannot be removed.
+pub fn remove_file(path: impl AsRef<Path>) -> io::Result<()> {
+    let (parent, name) = parent_and_name(path.as_ref())?;
+    Dir::open_ambient_dir(parent, ambient_authority())?.remove_file(name)
+}
+
+/// Remove the empty directory at `path`.
+///
+/// # Errors
+///
+/// Returns the I/O error when the parent directory cannot be opened or the
+/// directory is not empty or cannot be removed.
+pub fn remove_dir(path: impl AsRef<Path>) -> io::Result<()> {
+    let (parent, name) = parent_and_name(path.as_ref())?;
+    Dir::open_ambient_dir(parent, ambient_authority())?.remove_dir(name)
+}
+
+/// Set the Unix permission bits of the file or directory at `path` to `mode`,
+/// following symlinks as `std::fs::set_permissions` does.
+///
+/// # Errors
+///
+/// Returns the I/O error when the path cannot be opened or its permissions
+/// cannot be changed.
+#[cfg(unix)]
+pub fn set_unix_mode(path: impl AsRef<Path>, mode: u32) -> io::Result<()> {
+    use cap_std::fs::{Permissions, PermissionsExt};
+
+    let (dir, name) = open_parent(path.as_ref())?;
+    dir.set_permissions(&name, Permissions::from_mode(mode))
+}
+
 #[cfg(test)]
 mod tests;
