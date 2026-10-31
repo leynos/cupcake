@@ -28,6 +28,8 @@ impl PreToolUsePayload {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `pre_tool_use` module.
+
     use super::*;
 
     #[test]

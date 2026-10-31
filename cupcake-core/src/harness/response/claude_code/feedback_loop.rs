@@ -74,6 +74,8 @@ fn post_tool_use_output(
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `feedback_loop` module.
+
     use super::*;
     use crate::harness::events::claude_code::{
         CommonEventData, PostToolUsePayload, StopPayload, SubagentStopPayload,

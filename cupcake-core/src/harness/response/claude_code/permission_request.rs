@@ -109,6 +109,8 @@ impl PermissionRequestResponseBuilder {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `permission_request` module.
+
     use super::*;
     use serde_json::json;
 

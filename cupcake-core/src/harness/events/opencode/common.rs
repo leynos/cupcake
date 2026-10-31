@@ -49,6 +49,8 @@ impl CommonOpenCodeData {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `common` module.
+
     use super::*;
 
     #[test]

@@ -77,6 +77,8 @@ impl OpenCodeResponse {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `opencode` module.
+
     use super::*;
 
     #[test]

@@ -114,6 +114,8 @@ fn strip_glob_to_parent(path: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `command_path_extractor` module.
+
     use super::*;
 
     #[test]

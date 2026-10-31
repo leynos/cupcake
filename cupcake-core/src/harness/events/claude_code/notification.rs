@@ -105,6 +105,8 @@ impl NotificationPayload {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `notification` module.
+
     use super::*;
 
     #[test]

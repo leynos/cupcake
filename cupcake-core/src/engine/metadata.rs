@@ -222,6 +222,8 @@ pub struct PolicyUnit {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `metadata` module.
+
     use super::*;
 
     #[test]

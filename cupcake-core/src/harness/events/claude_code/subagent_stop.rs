@@ -34,6 +34,8 @@ impl SubagentStopPayload {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `subagent_stop` module.
+
     use super::*;
 
     #[test]

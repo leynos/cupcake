@@ -52,6 +52,8 @@ impl UserPromptSubmitPayload {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `user_prompt_submit` module.
+
     use super::*;
 
     #[test]

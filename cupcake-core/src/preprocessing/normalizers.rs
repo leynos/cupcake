@@ -163,6 +163,8 @@ impl WhitespaceNormalizer {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `normalizers` module.
+
     use super::*;
 
     #[test]

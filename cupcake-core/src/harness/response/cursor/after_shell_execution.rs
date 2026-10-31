@@ -13,6 +13,8 @@ pub fn build(_decision: &EngineDecision, _agent_messages: Option<Vec<String>>) -
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `after_shell_execution` module.
+
     use super::*;
 
     #[test]
