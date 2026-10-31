@@ -8,6 +8,8 @@
 
 #[cfg(test)]
 mod tests {
+    //! Adversarial tests for script inspection and execution.
+
     use cupcake_core::fs_access;
     use cupcake_core::harness::types::HarnessType;
     use cupcake_core::preprocessing::script_inspector::ScriptInspector;

@@ -9,6 +9,8 @@ use common::{create_test_project_for_harness, init_test_logging};
 
 #[cfg(test)]
 mod tests {
+    //! Integration tests for global builtin policies.
+
     use anyhow::Result;
     use cupcake_core::engine::Engine;
     use cupcake_core::fs_access;

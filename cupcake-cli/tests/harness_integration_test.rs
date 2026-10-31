@@ -8,23 +8,26 @@ use std::process::{Command, Stdio};
 use tempfile::TempDir;
 
 /// Helper to run cupcake init command
-fn run_init(dir: &Path, args: &[&str]) -> std::process::Output {
+fn run_init(dir: &Path, args: &[&str]) -> std::io::Result<std::process::Output> {
     std::process::Command::new(env!("CARGO_BIN_EXE_cupcake"))
         .current_dir(dir)
         .args(args)
         .output()
-        .expect("Failed to run cupcake init")
 }
 
 /// Helper to run cupcake init command with custom environment variables
 /// This is useful for tests that need to override HOME without affecting other tests
-fn run_init_with_env(dir: &Path, args: &[&str], env_vars: &[(&str, &str)]) -> std::process::Output {
+fn run_init_with_env(
+    dir: &Path,
+    args: &[&str],
+    env_vars: &[(&str, &str)],
+) -> std::io::Result<std::process::Output> {
     let mut cmd = std::process::Command::new(env!("CARGO_BIN_EXE_cupcake"));
     cmd.current_dir(dir).args(args);
     for (key, value) in env_vars {
         cmd.env(key, value);
     }
-    cmd.output().expect("Failed to run cupcake init")
+    cmd.output()
 }
 
 #[test]
@@ -33,7 +36,7 @@ fn test_init_with_claude_harness_fresh() {
     let dir_path = temp_dir.path();
 
     // Run init with --harness claude
-    let output = run_init(dir_path, &["init", "--harness", "claude"]);
+    let output = run_init(dir_path, &["init", "--harness", "claude"]).unwrap();
 
     assert!(
         output.status.success(),
@@ -99,7 +102,7 @@ fn test_init_with_claude_harness_existing_settings() {
     .unwrap();
 
     // Run init with --harness claude
-    let output = run_init(dir_path, &["init", "--harness", "claude"]);
+    let output = run_init(dir_path, &["init", "--harness", "claude"]).unwrap();
 
     assert!(
         output.status.success(),
@@ -129,11 +132,11 @@ fn test_init_with_claude_harness_duplicate_prevention() {
     let dir_path = temp_dir.path();
 
     // Run init with --harness claude twice
-    let output1 = run_init(dir_path, &["init", "--harness", "claude"]);
+    let output1 = run_init(dir_path, &["init", "--harness", "claude"]).unwrap();
     assert!(output1.status.success());
 
     // Second init should say project already exists but still configure harness
-    let output2 = run_init(dir_path, &["init", "--harness", "claude"]);
+    let output2 = run_init(dir_path, &["init", "--harness", "claude"]).unwrap();
     assert!(output2.status.success());
 
     // Read settings
@@ -201,7 +204,8 @@ fn test_init_global_with_claude_harness() {
         dir_path,
         &["init", "--global", "--harness", "claude"],
         &[("HOME", home_str)],
-    );
+    )
+    .unwrap();
 
     // Note: This may fail if global config already exists or on Windows where HOME
     // override doesn't work, which is okay for CI
@@ -225,7 +229,11 @@ fn test_init_global_with_claude_harness() {
 }
 
 /// Helper to run cupcake eval with stdin input and working directory
-fn run_eval_with_stdin_in_dir(dir: &Path, args: &[&str], stdin_data: &str) -> std::process::Output {
+fn run_eval_with_stdin_in_dir(
+    dir: &Path,
+    args: &[&str],
+    stdin_data: &str,
+) -> std::io::Result<std::process::Output> {
     run_eval_with_stdin_in_dir_and_env(dir, args, stdin_data, &[])
 }
 
@@ -235,7 +243,7 @@ fn run_eval_with_stdin_in_dir_and_env(
     args: &[&str],
     stdin_data: &str,
     env_vars: &[(&str, &str)],
-) -> std::process::Output {
+) -> std::io::Result<std::process::Output> {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_cupcake"));
     cmd.current_dir(dir)
         .args(args)
@@ -245,22 +253,20 @@ fn run_eval_with_stdin_in_dir_and_env(
     for (key, value) in env_vars {
         cmd.env(key, value);
     }
-    let mut child = cmd.spawn().expect("Failed to spawn cupcake eval");
+    let mut child = cmd.spawn()?;
 
     if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(stdin_data.as_bytes())
-            .expect("Failed to write to stdin");
+        stdin.write_all(stdin_data.as_bytes())?;
     }
 
-    child.wait_with_output().expect("Failed to wait on child")
+    child.wait_with_output()
 }
 
 /// Test that Cursor project init creates .cursor/hooks.json in project directory
 #[test]
 fn test_cursor_init_creates_project_level_hooks() {
     let temp_dir = TempDir::new().unwrap();
-    let output = run_init(temp_dir.path(), &["init", "--harness", "cursor"]);
+    let output = run_init(temp_dir.path(), &["init", "--harness", "cursor"]).unwrap();
     assert!(output.status.success());
 
     // Project-level hooks should exist
@@ -287,7 +293,8 @@ fn test_cursor_global_init_creates_user_level_hooks() {
         temp_dir.path(),
         &["init", "--global", "--harness", "cursor"],
         &[("HOME", home_str)],
-    );
+    )
+    .unwrap();
 
     assert!(output.status.success());
 
@@ -309,7 +316,7 @@ fn test_cursor_after_shell_execution_returns_empty() {
     let project_path = temp_dir.path();
 
     // Initialize Cupcake
-    let init_output = run_init(project_path, &["init", "--harness", "cursor"]);
+    let init_output = run_init(project_path, &["init", "--harness", "cursor"]).unwrap();
     assert!(
         init_output.status.success(),
         "Init failed: {}",
@@ -334,7 +341,8 @@ fn test_cursor_after_shell_execution_returns_empty() {
         project_path,
         &["eval", "--harness", "cursor", "--policy-dir", ".cupcake"],
         &cursor_event.to_string(),
-    );
+    )
+    .unwrap();
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
@@ -360,7 +368,7 @@ fn test_cursor_after_mcp_execution_returns_empty() {
     let temp_dir = TempDir::new().unwrap();
     let project_path = temp_dir.path();
 
-    let init_output = run_init(project_path, &["init", "--harness", "cursor"]);
+    let init_output = run_init(project_path, &["init", "--harness", "cursor"]).unwrap();
     assert!(init_output.status.success());
 
     let cursor_event = json!({
@@ -379,7 +387,8 @@ fn test_cursor_after_mcp_execution_returns_empty() {
         project_path,
         &["eval", "--harness", "cursor", "--policy-dir", ".cupcake"],
         &cursor_event.to_string(),
-    );
+    )
+    .unwrap();
 
     assert!(output.status.success());
 
@@ -399,7 +408,7 @@ fn test_cursor_after_agent_response_returns_empty() {
     let temp_dir = TempDir::new().unwrap();
     let project_path = temp_dir.path();
 
-    let init_output = run_init(project_path, &["init", "--harness", "cursor"]);
+    let init_output = run_init(project_path, &["init", "--harness", "cursor"]).unwrap();
     assert!(init_output.status.success());
 
     let cursor_event = json!({
@@ -416,7 +425,8 @@ fn test_cursor_after_agent_response_returns_empty() {
         project_path,
         &["eval", "--harness", "cursor", "--policy-dir", ".cupcake"],
         &cursor_event.to_string(),
-    );
+    )
+    .unwrap();
 
     assert!(output.status.success());
 
@@ -436,7 +446,7 @@ fn test_cursor_after_agent_thought_returns_empty() {
     let temp_dir = TempDir::new().unwrap();
     let project_path = temp_dir.path();
 
-    let init_output = run_init(project_path, &["init", "--harness", "cursor"]);
+    let init_output = run_init(project_path, &["init", "--harness", "cursor"]).unwrap();
     assert!(init_output.status.success());
 
     let cursor_event = json!({
@@ -453,7 +463,8 @@ fn test_cursor_after_agent_thought_returns_empty() {
         project_path,
         &["eval", "--harness", "cursor", "--policy-dir", ".cupcake"],
         &cursor_event.to_string(),
-    );
+    )
+    .unwrap();
 
     assert!(output.status.success());
 
@@ -473,7 +484,7 @@ fn test_cursor_stop_allow_returns_empty() {
     let temp_dir = TempDir::new().unwrap();
     let project_path = temp_dir.path();
 
-    let init_output = run_init(project_path, &["init", "--harness", "cursor"]);
+    let init_output = run_init(project_path, &["init", "--harness", "cursor"]).unwrap();
     assert!(init_output.status.success());
 
     let cursor_event = json!({
@@ -490,7 +501,8 @@ fn test_cursor_stop_allow_returns_empty() {
         project_path,
         &["eval", "--harness", "cursor", "--policy-dir", ".cupcake"],
         &cursor_event.to_string(),
-    );
+    )
+    .unwrap();
 
     assert!(output.status.success());
 
@@ -511,7 +523,7 @@ fn test_cursor_stop_block_returns_followup_message() {
     let temp_dir = TempDir::new().unwrap();
     let project_path = temp_dir.path();
 
-    let init_output = run_init(project_path, &["init", "--harness", "cursor"]);
+    let init_output = run_init(project_path, &["init", "--harness", "cursor"]).unwrap();
     assert!(init_output.status.success());
 
     // Create a policy that blocks stop when loop_count < 5
@@ -553,7 +565,8 @@ deny contains decision if {
         project_path,
         &["eval", "--harness", "cursor", "--policy-dir", ".cupcake"],
         &cursor_event.to_string(),
-    );
+    )
+    .unwrap();
 
     assert!(output.status.success());
 
@@ -580,7 +593,7 @@ fn test_cursor_before_submit_prompt_block_includes_user_message() {
     let temp_dir = TempDir::new().unwrap();
     let project_path = temp_dir.path();
 
-    let init_output = run_init(project_path, &["init", "--harness", "cursor"]);
+    let init_output = run_init(project_path, &["init", "--harness", "cursor"]).unwrap();
     assert!(init_output.status.success());
 
     // Create a policy that blocks certain prompts
@@ -621,7 +634,8 @@ deny contains decision if {
         project_path,
         &["eval", "--harness", "cursor", "--policy-dir", ".cupcake"],
         &cursor_event.to_string(),
-    );
+    )
+    .unwrap();
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
@@ -649,7 +663,7 @@ fn test_cursor_before_shell_execution_snake_case_output() {
     let temp_dir = TempDir::new().unwrap();
     let project_path = temp_dir.path();
 
-    let init_output = run_init(project_path, &["init", "--harness", "cursor"]);
+    let init_output = run_init(project_path, &["init", "--harness", "cursor"]).unwrap();
     assert!(init_output.status.success());
 
     // Create policy that blocks with message
@@ -688,7 +702,8 @@ deny contains decision if {
         project_path,
         &["eval", "--harness", "cursor", "--policy-dir", ".cupcake"],
         &cursor_event.to_string(),
-    );
+    )
+    .unwrap();
 
     assert!(output.status.success());
 
