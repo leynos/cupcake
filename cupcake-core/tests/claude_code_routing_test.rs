@@ -124,13 +124,13 @@ deny contains decision if {{
 }
 
 /// Helper to get Claude CLI path
-fn get_claude_path() -> String {
+fn get_claude_path() -> Result<String, String> {
     // Try environment variable first (for CI/custom installs)
     if let Ok(path) = std::env::var("CLAUDE_CLI_PATH") {
         eprintln!("[DEBUG] CLAUDE_CLI_PATH env var: {path}");
         if std::path::Path::new(&path).exists() {
             eprintln!("[DEBUG] Claude CLI found at env path: {path}");
-            return path;
+            return Ok(path);
         } else {
             eprintln!("[DEBUG] Claude CLI path from env doesn't exist: {path}");
         }
@@ -139,20 +139,24 @@ fn get_claude_path() -> String {
     }
 
     // Default to HOME-based path
-    let home = std::env::var("HOME").unwrap_or_else(|_| {
-        eprintln!("[DEBUG] HOME env var not set, trying USERPROFILE (Windows)");
-        std::env::var("USERPROFILE").expect("Neither HOME nor USERPROFILE set")
-    });
+    let home = match std::env::var("HOME") {
+        Ok(home) => home,
+        Err(_) => {
+            eprintln!("[DEBUG] HOME env var not set, trying USERPROFILE (Windows)");
+            std::env::var("USERPROFILE")
+                .map_err(|_| "Neither HOME nor USERPROFILE set".to_string())?
+        }
+    };
     let claude_path = format!("{home}/.claude/local/claude");
 
     if !std::path::Path::new(&claude_path).exists() {
-        panic!(
+        return Err(format!(
             "Claude CLI not found at {claude_path}. Set CLAUDE_CLI_PATH env var or install Claude."
-        );
+        ));
     }
 
     eprintln!("[DEBUG] Claude CLI found at default path: {claude_path}");
-    claude_path
+    Ok(claude_path)
 }
 
 /// Helper to verify routing map contains expected entries
@@ -240,7 +244,7 @@ async fn verify_routing(project_path: &std::path::Path, expected_key: &str, expe
     fs_access::write(claude_dir.join("settings.json"), settings).unwrap();
 
     // Get claude CLI path
-    let claude_path = get_claude_path();
+    let claude_path = get_claude_path().unwrap();
     eprintln!("[DEBUG] Running claude command from: {project_path:?}");
     eprintln!("[DEBUG] Claude command: {claude_path} -p 'hello world' --model sonnet");
 
@@ -581,7 +585,7 @@ async fn test_wildcard_policy_routing() {
     eprintln!("[TIMING] Settings written: {:?}", test_start.elapsed());
 
     // Get claude CLI path
-    let claude_path = get_claude_path();
+    let claude_path = get_claude_path().unwrap();
     eprintln!("[TIMING] Starting Claude execution with sonnet model...");
     let claude_start = Instant::now();
 
@@ -785,7 +789,7 @@ deny contains decision if {
     fs_access::write(claude_dir.join("settings.json"), settings).unwrap();
 
     // Get claude CLI path
-    let claude_path = get_claude_path();
+    let claude_path = get_claude_path().unwrap();
 
     // On Windows, PowerShell scripts (.ps1) cannot be executed directly
     let output = if cfg!(windows) && claude_path.ends_with(".ps1") {
