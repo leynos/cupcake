@@ -1,7 +1,5 @@
 //! Integration tests for building `ask` decision reasons with `concat`.
 
-#![allow(unused_imports)]
-
 use cupcake_core::engine::Engine;
 use cupcake_core::fs_access;
 use serde_json::json;

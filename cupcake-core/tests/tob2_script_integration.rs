@@ -3,8 +3,6 @@
 //! This test creates real policies and real script files to demonstrate
 //! that our script inspection feature properly fixes the TOB-2 vulnerability.
 
-#![allow(unused_imports)]
-
 use anyhow::Result;
 use cupcake_core::engine::Engine;
 use cupcake_core::fs_access;

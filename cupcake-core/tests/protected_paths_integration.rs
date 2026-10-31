@@ -2,8 +2,6 @@
 //!
 //! Tests that protected paths allow reads but block writes
 
-#![allow(unused_imports)]
-
 use anyhow::Result;
 use cupcake_core::engine::Engine;
 use cupcake_core::fs_access;

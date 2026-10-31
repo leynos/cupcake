@@ -8,8 +8,12 @@
 //! - Decision synthesis
 //! - Response formatting matching Factory AI Droid hook expectations
 
-mod common;
-use common::{create_test_project_for_harness, init_test_logging};
+#[path = "common/logging.rs"]
+mod logging;
+#[path = "common/project.rs"]
+mod project;
+use logging::init_test_logging;
+use project::create_test_project_for_harness;
 
 use anyhow::Result;
 use cupcake_core::engine::{decision::FinalDecision, Engine, EngineConfig};

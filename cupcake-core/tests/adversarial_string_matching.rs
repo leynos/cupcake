@@ -1,8 +1,6 @@
 //! Adversarial test suite for TOB-EQTY-LAB-CUPCAKE-3
 //! Tests defenses against string matching bypass via spacing and obfuscation
 
-#![allow(unused_imports)]
-
 use anyhow::Result;
 use cupcake_core::engine::Engine;
 use cupcake_core::fs_access;

@@ -1,8 +1,6 @@
 //! Adversarial test suite for TOB-EQTY-LAB-CUPCAKE-4
 //! Tests defenses against symlink-based path bypass attacks
 
-#![allow(unused_imports)]
-
 use anyhow::Result;
 use cupcake_core::engine::Engine;
 use cupcake_core::fs_access;

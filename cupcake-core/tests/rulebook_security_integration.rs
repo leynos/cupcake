@@ -2,8 +2,6 @@
 //!
 //! Tests the complete flow from configuration to policy enforcement
 
-#![allow(unused_imports)]
-
 use anyhow::Result;
 use cupcake_core::engine::Engine;
 use cupcake_core::fs_access;

@@ -14,15 +14,18 @@ use tempfile::TempDir;
 #[cfg(unix)]
 use std::os::unix::fs::symlink;
 
-mod common;
-use common::init_test_logging;
+#[path = "common/logging.rs"]
+mod logging;
+#[path = "common/project.rs"]
+mod project;
+use logging::init_test_logging;
 
 /// Setup test project with rulebook_security_guardrails builtin enabled
 async fn setup_test_project_with_guardrails(
     project_dir: &std::path::Path,
 ) -> Result<(Engine, TempDir)> {
     // Create basic project structure
-    common::create_test_project_for_harness(project_dir, HarnessType::ClaudeCode)?;
+    project::create_test_project_for_harness(project_dir, HarnessType::ClaudeCode)?;
 
     let cupcake_dir = project_dir.join(".cupcake");
     let policies_dir = cupcake_dir.join("policies");

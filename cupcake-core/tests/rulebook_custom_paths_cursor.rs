@@ -2,8 +2,6 @@
 //!
 //! Verifies that custom paths (not just .cupcake) get total lockdown protection in Cursor
 
-#![allow(unused_imports)]
-
 use anyhow::Result;
 use cupcake_core::engine::Engine;
 use cupcake_core::fs_access;
