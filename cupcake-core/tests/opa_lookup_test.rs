@@ -1,6 +1,6 @@
 //! Integration tests for OPA binary lookup logic
 
-use std::fs;
+use cupcake_core::fs_access;
 use std::path::PathBuf;
 use tempfile::TempDir;
 
@@ -13,21 +13,20 @@ fn test_find_bundled_opa_unix() {
     // Create a temporary directory structure
     let temp_dir = TempDir::new().unwrap();
     let bin_dir = temp_dir.path().join("bin");
-    fs::create_dir(&bin_dir).unwrap();
+    fs_access::create_dir_all(&bin_dir).unwrap();
 
     // Create mock cupcake and opa binaries
     let mock_cupcake = bin_dir.join("cupcake");
     let mock_opa = bin_dir.join("opa");
 
-    fs::write(&mock_cupcake, "#!/bin/sh\necho mock cupcake").unwrap();
-    fs::write(&mock_opa, "#!/bin/sh\necho mock opa").unwrap();
+    fs_access::write(&mock_cupcake, "#!/bin/sh\necho mock cupcake").unwrap();
+    fs_access::write(&mock_opa, "#!/bin/sh\necho mock opa").unwrap();
 
     // Make them executable on Unix
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&mock_cupcake, fs::Permissions::from_mode(0o755)).unwrap();
-        fs::set_permissions(&mock_opa, fs::Permissions::from_mode(0o755)).unwrap();
+        fs_access::set_unix_mode(&mock_cupcake, 0o755).unwrap();
+        fs_access::set_unix_mode(&mock_opa, 0o755).unwrap();
     }
 
     // Test the lookup by simulating current_exe returning our mock cupcake
@@ -46,14 +45,14 @@ fn test_find_bundled_opa_windows() {
     // Create a temporary directory structure
     let temp_dir = TempDir::new().unwrap();
     let bin_dir = temp_dir.path().join("bin");
-    fs::create_dir(&bin_dir).unwrap();
+    fs_access::create_dir_all(&bin_dir).unwrap();
 
     // Create mock cupcake.exe and opa.exe
     let mock_cupcake = bin_dir.join("cupcake.exe");
     let mock_opa = bin_dir.join("opa.exe");
 
-    fs::write(&mock_cupcake, "mock cupcake").unwrap();
-    fs::write(&mock_opa, "mock opa").unwrap();
+    fs_access::write(&mock_cupcake, "mock cupcake").unwrap();
+    fs_access::write(&mock_opa, "mock opa").unwrap();
 
     // Test the lookup
     assert!(mock_opa.exists());
@@ -65,12 +64,11 @@ fn test_opa_path_cli_override() {
     // Create a temporary directory with a mock OPA
     let temp_dir = TempDir::new().unwrap();
     let custom_opa = temp_dir.path().join("custom-opa");
-    fs::write(&custom_opa, "#!/bin/sh\necho custom opa").unwrap();
+    fs_access::write(&custom_opa, "#!/bin/sh\necho custom opa").unwrap();
 
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&custom_opa, fs::Permissions::from_mode(0o755)).unwrap();
+        fs_access::set_unix_mode(&custom_opa, 0o755).unwrap();
     }
 
     // The actual find_opa_binary function would accept a CLI override parameter
@@ -96,8 +94,8 @@ fn test_opa_lookup_priority() {
     let bundled_dir = temp_dir.path().join("bundled");
     let env_dir = temp_dir.path().join("env");
 
-    fs::create_dir(&bundled_dir).unwrap();
-    fs::create_dir(&env_dir).unwrap();
+    fs_access::create_dir_all(&bundled_dir).unwrap();
+    fs_access::create_dir_all(&env_dir).unwrap();
 
     let opa_name = if cfg!(windows) { "opa.exe" } else { "opa" };
 
@@ -105,8 +103,8 @@ fn test_opa_lookup_priority() {
     let env_opa = env_dir.join(opa_name);
 
     // Test 1: CLI override provided - CLI should be preferred (highest priority)
-    fs::write(&bundled_opa, "bundled").unwrap();
-    fs::write(&env_opa, "cli").unwrap();
+    fs_access::write(&bundled_opa, "bundled").unwrap();
+    fs_access::write(&env_opa, "cli").unwrap();
 
     let result = resolve_opa_path(
         Some(bundled_dir.clone()),
@@ -123,7 +121,7 @@ fn test_opa_lookup_priority() {
     );
 
     // Test 3: Remove bundled, no CLI override - system fallback should be used
-    fs::remove_file(&bundled_opa).unwrap();
+    fs_access::remove_file(&bundled_opa).unwrap();
 
     let result = resolve_opa_path(Some(bundled_dir.clone()), None, "system-fallback");
     assert_eq!(
@@ -170,12 +168,12 @@ fn test_resolve_opa_path_helper() {
 
     // Test CLI override has highest priority
     let cli_path = temp_dir.path().join("cli-opa");
-    fs::write(&cli_path, "cli").unwrap();
+    fs_access::write(&cli_path, "cli").unwrap();
 
     let bundled_dir = temp_dir.path().join("bundled");
-    fs::create_dir(&bundled_dir).unwrap();
+    fs_access::create_dir_all(&bundled_dir).unwrap();
     let bundled_opa = bundled_dir.join(opa_name);
-    fs::write(&bundled_opa, "bundled").unwrap();
+    fs_access::write(&bundled_opa, "bundled").unwrap();
 
     let result = resolve_opa_path(
         Some(bundled_dir.clone()),

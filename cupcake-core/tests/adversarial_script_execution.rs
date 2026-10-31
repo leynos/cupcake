@@ -8,11 +8,13 @@
 
 #[cfg(test)]
 mod tests {
+    //! Adversarial tests for script inspection and execution.
+
+    use cupcake_core::fs_access;
     use cupcake_core::harness::types::HarnessType;
     use cupcake_core::preprocessing::script_inspector::ScriptInspector;
     use cupcake_core::preprocessing::{preprocess_input, PreprocessConfig};
     use serde_json::json;
-    use std::fs;
     use std::path::PathBuf;
     use tempfile::TempDir;
 
@@ -62,7 +64,7 @@ rm -rf /important
 
 echo "Done!"
 "#;
-        fs::write(&script_path, script_content).unwrap();
+        fs_access::write(&script_path, script_content).unwrap();
 
         // Test loading with absolute path
         let loaded = ScriptInspector::load_script_content(&script_path, None);
@@ -85,7 +87,7 @@ echo "Done!"
         let script_path = temp_dir.path().join("deploy.sh");
 
         // Write a test script
-        fs::write(&script_path, "#!/bin/bash\nrm -rf /important").unwrap();
+        fs_access::write(&script_path, "#!/bin/bash\nrm -rf /important").unwrap();
 
         let mut event = json!({
             "hook_event_name": "PreToolUse",
@@ -116,7 +118,7 @@ echo "Done!"
         let script_path = temp_dir.path().join("build.sh");
 
         // Write a test script
-        fs::write(&script_path, "#!/bin/bash\nrm -rf .cupcake").unwrap();
+        fs_access::write(&script_path, "#!/bin/bash\nrm -rf .cupcake").unwrap();
 
         let mut event = json!({
             "hook_event_name": "beforeShellExecution",
@@ -141,7 +143,7 @@ echo "Done!"
     fn test_script_inspection_disabled_by_default() {
         let temp_dir = TempDir::new().unwrap();
         let script_path = temp_dir.path().join("script.sh");
-        fs::write(&script_path, "#!/bin/bash\necho test").unwrap();
+        fs_access::write(&script_path, "#!/bin/bash\necho test").unwrap();
 
         let mut event = json!({
             "hook_event_name": "PreToolUse",
@@ -178,7 +180,7 @@ echo "Done!"
         ];
 
         for (filename, content) in &scripts {
-            fs::write(temp_dir.path().join(filename), content).unwrap();
+            fs_access::write(temp_dir.path().join(filename), content).unwrap();
         }
 
         // Test patterns that should be detected

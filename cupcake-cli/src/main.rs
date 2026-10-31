@@ -2,7 +2,6 @@
 
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, ValueEnum};
-use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command as ProcessCommand;
@@ -14,7 +13,7 @@ use tabled::{
 use tracing::{debug, error, info};
 use tracing_subscriber::EnvFilter;
 
-use cupcake_core::{engine, harness, telemetry::TelemetryContext, validator};
+use cupcake_core::{engine, fs_access, harness, telemetry::TelemetryContext, validator};
 
 mod harness_config;
 mod migrations;
@@ -358,8 +357,15 @@ fn initialize_tracing(log_level: &LogLevel, trace_modules: &[TraceModule]) {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .context("Failed to build the async runtime")?;
+    runtime.block_on(run())
+}
+
+async fn run() -> Result<()> {
     let cli = Cli::parse();
 
     // Initialize tracing with CLI flags
@@ -604,7 +610,8 @@ async fn eval_command(
     println!("{}", serde_json::to_string(&response)?);
 
     // In strict mode, exit non-zero on blocking decisions
-    if strict && (decision.is_halt() || decision.is_blocking()) {
+    let stops_agent = decision.is_halt() || decision.is_blocking();
+    if strict && stops_agent {
         std::process::exit(1);
     }
 
@@ -628,12 +635,11 @@ async fn verify_command(
             println!("✅ Global config found at: {:?}", global_paths.root);
 
             // Count global policies
-            if let Ok(entries) = fs::read_dir(&global_paths.policies) {
+            if let Ok(entries) = fs_access::read_dir(&global_paths.policies) {
                 let policy_count = entries
-                    .filter_map(Result::ok)
-                    .filter(|e| {
-                        e.path()
-                            .extension()
+                    .iter()
+                    .filter(|path| {
+                        path.extension()
                             .and_then(|s| s.to_str())
                             .map(|s| s == "rego")
                             .unwrap_or(false)
@@ -788,9 +794,9 @@ async fn init_global_config(harness: Option<HarnessType>) -> Result<()> {
     // Create harness-specific system evaluate policies
     // Claude system evaluate
     let claude_system_dir = global_paths.policies.join("claude").join("system");
-    fs::create_dir_all(&claude_system_dir)?;
+    fs_access::create_dir_all(&claude_system_dir)?;
 
-    fs::write(
+    fs_access::write(
         claude_system_dir.join("evaluate.rego"),
         r#"# METADATA
 # scope: package
@@ -842,9 +848,9 @@ collect_verbs(verb_name) := result if {
 
     // Cursor system evaluate
     let cursor_system_dir = global_paths.policies.join("cursor").join("system");
-    fs::create_dir_all(&cursor_system_dir)?;
+    fs_access::create_dir_all(&cursor_system_dir)?;
 
-    fs::write(
+    fs_access::write(
         cursor_system_dir.join("evaluate.rego"),
         r#"# METADATA
 # scope: package
@@ -896,9 +902,9 @@ collect_verbs(verb_name) := result if {
 
     // Factory system evaluate
     let factory_system_dir = global_paths.policies.join("factory").join("system");
-    fs::create_dir_all(&factory_system_dir)?;
+    fs_access::create_dir_all(&factory_system_dir)?;
 
-    fs::write(
+    fs_access::write(
         factory_system_dir.join("evaluate.rego"),
         r#"# METADATA
 # scope: package
@@ -950,9 +956,9 @@ collect_verbs(verb_name) := result if {
 
     // OpenCode system evaluate
     let opencode_system_dir = global_paths.policies.join("opencode").join("system");
-    fs::create_dir_all(&opencode_system_dir)?;
+    fs_access::create_dir_all(&opencode_system_dir)?;
 
-    fs::write(
+    fs_access::write(
         opencode_system_dir.join("evaluate.rego"),
         r#"# METADATA
 # scope: package
@@ -1003,7 +1009,7 @@ collect_verbs(verb_name) := result if {
     )?;
 
     // Create an example global policy
-    fs::write(
+    fs_access::write(
         global_paths.policies.join("example_global.rego"),
         r#"# METADATA
 # scope: package
@@ -1052,12 +1058,12 @@ import rego.v1
     let claude_builtins_dir = global_paths.policies.join("claude").join("builtins");
     let cursor_builtins_dir = global_paths.policies.join("cursor").join("builtins");
     let helpers_dir = global_paths.policies.join("helpers");
-    fs::create_dir_all(&claude_builtins_dir)?;
-    fs::create_dir_all(&cursor_builtins_dir)?;
-    fs::create_dir_all(&helpers_dir)?;
+    fs_access::create_dir_all(&claude_builtins_dir)?;
+    fs_access::create_dir_all(&cursor_builtins_dir)?;
+    fs_access::create_dir_all(&helpers_dir)?;
 
     // Write helper library (shared by both harnesses)
-    fs::write(helpers_dir.join("commands.rego"), HELPERS_COMMANDS)?;
+    fs_access::write(helpers_dir.join("commands.rego"), HELPERS_COMMANDS)?;
 
     // Deploy Claude global builtin policies
     let claude_global_builtins = vec![
@@ -1076,7 +1082,7 @@ import rego.v1
     ];
 
     for (filename, content) in claude_global_builtins {
-        fs::write(claude_builtins_dir.join(filename), content)?;
+        fs_access::write(claude_builtins_dir.join(filename), content)?;
     }
 
     // Deploy Cursor global builtin policies
@@ -1096,12 +1102,12 @@ import rego.v1
     ];
 
     for (filename, content) in cursor_global_builtins {
-        fs::write(cursor_builtins_dir.join(filename), content)?;
+        fs_access::write(cursor_builtins_dir.join(filename), content)?;
     }
 
     // Deploy Factory AI global builtin policies
     let factory_builtins_dir = global_paths.policies.join("factory").join("builtins");
-    fs::create_dir_all(&factory_builtins_dir)?;
+    fs_access::create_dir_all(&factory_builtins_dir)?;
 
     let factory_global_builtins = vec![
         (
@@ -1119,12 +1125,12 @@ import rego.v1
     ];
 
     for (filename, content) in factory_global_builtins {
-        fs::write(factory_builtins_dir.join(filename), content)?;
+        fs_access::write(factory_builtins_dir.join(filename), content)?;
     }
 
     // Deploy OpenCode global builtin policies
     let opencode_builtins_dir = global_paths.policies.join("opencode").join("builtins");
-    fs::create_dir_all(&opencode_builtins_dir)?;
+    fs_access::create_dir_all(&opencode_builtins_dir)?;
 
     let opencode_global_builtins = vec![
         (
@@ -1142,7 +1148,7 @@ import rego.v1
     ];
 
     for (filename, content) in opencode_global_builtins {
-        fs::write(opencode_builtins_dir.join(filename), content)?;
+        fs_access::write(opencode_builtins_dir.join(filename), content)?;
     }
 
     println!("✅ Initialized global Cupcake configuration");
@@ -1190,8 +1196,8 @@ async fn init_project_config(harness: HarnessType) -> Result<()> {
 
         if !system_dir.exists() {
             eprintln!("Warning: .cupcake/system/ directory not found. Creating it...");
-            fs::create_dir_all(&system_dir).context("Failed to create system directory")?;
-            fs::write(system_dir.join("evaluate.rego"), SYSTEM_EVALUATE_TEMPLATE)
+            fs_access::create_dir_all(&system_dir).context("Failed to create system directory")?;
+            fs_access::write(system_dir.join("evaluate.rego"), SYSTEM_EVALUATE_TEMPLATE)
                 .context("Failed to create system evaluate.rego file")?;
         }
 
@@ -1204,12 +1210,12 @@ async fn init_project_config(harness: HarnessType) -> Result<()> {
         // Ensure commands.rego exists in system/
         let commands_path = system_dir.join("commands.rego");
         if !commands_path.exists() {
-            fs::write(&commands_path, HELPERS_COMMANDS)
+            fs_access::write(&commands_path, HELPERS_COMMANDS)
                 .context("Failed to create system/commands.rego file")?;
         }
 
         // Create the harness-specific builtins directory
-        fs::create_dir_all(format!(".cupcake/policies/{harness_name}/builtins"))
+        fs_access::create_dir_all(format!(".cupcake/policies/{harness_name}/builtins"))
             .context("Failed to create harness builtins directory")?;
 
         // Deploy builtin policies for this harness
@@ -1223,15 +1229,14 @@ async fn init_project_config(harness: HarnessType) -> Result<()> {
         info!("Initializing Cupcake project structure...");
 
         // Create system directory at root level (helpers consolidated into system)
-        fs::create_dir_all(".cupcake/system").context("Failed to create system directory")?;
+        fs_access::create_dir_all(".cupcake/system")
+            .context("Failed to create system directory")?;
 
         // Set Unix permissions on .cupcake directory (TOB-EQTY-LAB-CUPCAKE-4)
         #[cfg(unix)]
         {
-            use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(cupcake_dir)?.permissions();
-            perms.set_mode(0o700); // Owner: rwx, Group: ---, Other: ---
-            fs::set_permissions(cupcake_dir, perms)
+            // Owner: rwx, Group: ---, Other: ---
+            fs_access::set_unix_mode(cupcake_dir, 0o700)
                 .context("Failed to set permissions on .cupcake directory")?;
             info!(".cupcake directory permissions set to 0o700 (owner-only access)");
         }
@@ -1242,26 +1247,26 @@ async fn init_project_config(harness: HarnessType) -> Result<()> {
         }
 
         // Write the base rulebook configuration
-        fs::write(".cupcake/rulebook.yml", RULEBOOK_TEMPLATE)
+        fs_access::write(".cupcake/rulebook.yml", RULEBOOK_TEMPLATE)
             .context("Failed to create rulebook.yml file")?;
 
         // Create harness-specific builtins directory
-        fs::create_dir_all(format!(".cupcake/policies/{harness_name}/builtins"))
+        fs_access::create_dir_all(format!(".cupcake/policies/{harness_name}/builtins"))
             .context("Failed to create harness builtins directory")?;
 
         // Write the system evaluate policy (shared at root level)
-        fs::write(".cupcake/system/evaluate.rego", SYSTEM_EVALUATE_TEMPLATE)
+        fs_access::write(".cupcake/system/evaluate.rego", SYSTEM_EVALUATE_TEMPLATE)
             .context("Failed to create system evaluate.rego file")?;
 
         // Write helper library (now in system/ directory)
-        fs::write(".cupcake/system/commands.rego", HELPERS_COMMANDS)
+        fs_access::write(".cupcake/system/commands.rego", HELPERS_COMMANDS)
             .context("Failed to create system/commands.rego file")?;
 
         // Deploy builtin policies for this harness only
         deploy_harness_builtins(&harness, harness_name)?;
 
         // Write a simple example policy in the harness-specific directory
-        fs::write(
+        fs_access::write(
             format!(".cupcake/policies/{harness_name}/example.rego"),
             EXAMPLE_POLICY_TEMPLATE,
         )
@@ -1368,7 +1373,7 @@ fn deploy_harness_builtins(harness: &HarnessType, harness_name: &str) -> Result<
 
     for (filename, content) in builtins_to_deploy {
         let path = format!(".cupcake/policies/{harness_name}/builtins/{filename}");
-        fs::write(&path, content)
+        fs_access::write(&path, content)
             .with_context(|| format!("Failed to create builtin: {filename}"))?;
     }
 
@@ -1448,10 +1453,7 @@ async fn validate_command(policy_dir: PathBuf, json: bool) -> Result<()> {
 }
 
 fn find_rego_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
-    for entry in std::fs::read_dir(dir)? {
-        let entry = entry?;
-        let path = entry.path();
-
+    for path in fs_access::read_dir(dir)? {
         if path.is_file() {
             if let Some(ext) = path.extension() {
                 if ext == "rego" {
@@ -1562,7 +1564,7 @@ async fn inspect_command(policy_dir: PathBuf, json: bool, table: bool) -> Result
     let mut policies_metadata = Vec::new();
 
     for path in &policy_files {
-        let content = fs::read_to_string(path)
+        let content = fs_access::read_to_string(path)
             .with_context(|| format!("Failed to read policy file: {path:?}"))?;
 
         // Parse metadata using the engine's metadata parser
@@ -1792,7 +1794,7 @@ async fn onboard_command() -> Result<()> {
     let input = input.trim().to_lowercase();
 
     // Accept empty (just Enter), 'y', or 'yes'
-    if !input.is_empty() && input != "y" && input != "yes" {
+    if !matches!(input.as_str(), "" | "y" | "yes") {
         println!("Aborted.");
         return Ok(());
     }

@@ -14,9 +14,9 @@ use common::{create_test_project_for_harness, init_test_logging};
 
 use anyhow::Result;
 use cupcake_core::engine::{decision::FinalDecision, Engine, EngineConfig};
+use cupcake_core::fs_access;
 use cupcake_core::harness::types::HarnessType;
 use serde_json::json;
-use std::fs;
 use tempfile::TempDir;
 
 #[tokio::test]
@@ -48,7 +48,7 @@ deny contains decision if {
 }
 "#;
 
-    fs::write(
+    fs_access::write(
         project_dir
             .path()
             .join(".cupcake/policies/cursor/shell_deny.rego"),
@@ -111,7 +111,7 @@ halt contains decision if {
 }
 "#;
 
-    fs::write(
+    fs_access::write(
         project_dir
             .path()
             .join(".cupcake/policies/cursor/prompt_halt.rego"),
@@ -173,7 +173,7 @@ ask contains decision if {
 }
 "#;
 
-    fs::write(
+    fs_access::write(
         project_dir
             .path()
             .join(".cupcake/policies/cursor/file_read.rego"),
@@ -239,7 +239,7 @@ add_context contains msg if {
 }
 "#;
 
-    fs::write(
+    fs_access::write(
         project_dir
             .path()
             .join(".cupcake/policies/cursor/context.rego"),
@@ -302,7 +302,7 @@ deny contains decision if {
 }
 "#;
 
-    fs::write(
+    fs_access::write(
         project_dir.path().join(".cupcake/policies/cursor/mcp.rego"),
         policy_content,
     )?;
@@ -360,7 +360,7 @@ add_context contains msg if {
 }
 "#;
 
-    fs::write(
+    fs_access::write(
         project_dir
             .path()
             .join(".cupcake/policies/cursor/edit.rego"),
@@ -415,7 +415,7 @@ add_context contains msg if {
 }
 "#;
 
-    fs::write(
+    fs_access::write(
         project_dir
             .path()
             .join(".cupcake/policies/cursor/wildcard.rego"),
@@ -484,7 +484,7 @@ deny contains decision if {
 }
 "#;
 
-    fs::write(
+    fs_access::write(
         project_dir
             .path()
             .join(".cupcake/policies/cursor/dual_message.rego"),

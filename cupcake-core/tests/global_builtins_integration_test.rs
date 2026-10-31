@@ -9,11 +9,13 @@ use common::{create_test_project_for_harness, init_test_logging};
 
 #[cfg(test)]
 mod tests {
+    //! Integration tests for global builtin policies.
+
     use anyhow::Result;
     use cupcake_core::engine::Engine;
+    use cupcake_core::fs_access;
     use serde_json::json;
     use serial_test::serial;
-    use std::fs;
     use std::path::Path;
     use tempfile::TempDir;
 
@@ -24,16 +26,16 @@ mod tests {
         let claude_dir = policies_dir.join("claude");
         let system_dir = claude_dir.join("system");
 
-        fs::create_dir_all(&system_dir)?;
+        fs_access::create_dir_all(&system_dir)?;
 
         // Use the same fixture that works in other global tests
-        fs::write(
+        fs_access::write(
             system_dir.join("evaluate.rego"),
             include_str!("fixtures/global_system_evaluate.rego"),
         )?;
 
         // Create test policies (not in builtins directory to avoid filtering)
-        fs::write(
+        fs_access::write(
             claude_dir.join("test_system_protection.rego"),
             r#"# METADATA
 # scope: package
@@ -56,7 +58,7 @@ halt contains decision if {
 }"#,
         )?;
 
-        fs::write(
+        fs_access::write(
             claude_dir.join("test_sensitive_data.rego"),
             r#"# METADATA
 # scope: package
@@ -79,7 +81,7 @@ deny contains decision if {
 }"#,
         )?;
 
-        fs::write(
+        fs_access::write(
             claude_dir.join("test_cupcake_exec.rego"),
             r#"# METADATA
 # scope: package
@@ -105,7 +107,7 @@ halt contains decision if {
         // Create rulebook with builtins enabled
         // Note: The global builtins aren't in "builtins" subdirectory in tests,
         // so we need to ensure they're not filtered out
-        fs::write(
+        fs_access::write(
             global_dir.join("rulebook.yml"),
             r#"signals: {}
 builtins: {}
@@ -283,11 +285,11 @@ builtins: {}
         let builtins_dir = claude_dir.join("builtins");
         let system_dir = claude_dir.join("system");
 
-        fs::create_dir_all(&builtins_dir)?;
-        fs::create_dir_all(&system_dir)?;
+        fs_access::create_dir_all(&builtins_dir)?;
+        fs_access::create_dir_all(&system_dir)?;
 
         // Create global system evaluate policy
-        fs::write(
+        fs_access::write(
             system_dir.join("evaluate.rego"),
             r#"package cupcake.global.system
 import rego.v1
@@ -324,7 +326,7 @@ collect_verbs(verb_name) := result if {
         )?;
 
         // Create builtin policies (they exist but are disabled)
-        fs::write(
+        fs_access::write(
             builtins_dir.join("system_protection.rego"),
             r#"package cupcake.global.policies.builtins.system_protection
 import rego.v1
@@ -342,7 +344,7 @@ halt contains decision if {
         )?;
 
         // Create rulebook with builtins DISABLED
-        fs::write(
+        fs_access::write(
             global_temp.path().join("rulebook.yml"),
             r#"signals: {}
 builtins:
@@ -410,11 +412,11 @@ builtins:
         let builtins_dir = claude_dir.join("builtins");
         let system_dir = claude_dir.join("system");
 
-        fs::create_dir_all(&builtins_dir)?;
-        fs::create_dir_all(&system_dir)?;
+        fs_access::create_dir_all(&builtins_dir)?;
+        fs_access::create_dir_all(&system_dir)?;
 
         // Create global system evaluate policy
-        fs::write(
+        fs_access::write(
             system_dir.join("evaluate.rego"),
             r#"package cupcake.global.system
 import rego.v1
@@ -451,7 +453,7 @@ collect_verbs(verb_name) := result if {
         )?;
 
         // Create builtin that uses signals - signals come through input.signals, not data!
-        fs::write(
+        fs_access::write(
             builtins_dir.join("system_protection.rego"),
             r#"# METADATA
 # scope: package
@@ -484,7 +486,7 @@ halt contains decision if {
 
         // Create rulebook with additional paths AND the generated signals
         // The signals must be present for the builtin to work!
-        fs::write(
+        fs_access::write(
             global_temp.path().join("rulebook.yml"),
             r#"signals:
   __builtin_system_protection_paths:
