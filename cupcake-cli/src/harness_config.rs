@@ -6,8 +6,6 @@
 use anyhow::{anyhow, Context, Result};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 /// Trait for agent harness configuration
@@ -65,8 +63,8 @@ impl HarnessConfig for ClaudeHarness {
         // Determine the policy path to use in commands
         let policy_path = if global {
             // Global config - use absolute path
-            let abs_path =
-                fs::canonicalize(policy_dir).unwrap_or_else(|_| policy_dir.to_path_buf());
+            let abs_path = cupcake_core::ambient_fs::canonicalize(policy_dir)
+                .unwrap_or_else(|_| policy_dir.to_path_buf());
             abs_path.display().to_string()
         } else {
             // Project config - use environment variable for portability
@@ -136,8 +134,8 @@ impl HarnessConfig for CursorHarness {
         // Determine the policy path to use in commands
         let policy_path = if global {
             // Global config - use absolute path
-            let abs_path =
-                fs::canonicalize(policy_dir).unwrap_or_else(|_| policy_dir.to_path_buf());
+            let abs_path = cupcake_core::ambient_fs::canonicalize(policy_dir)
+                .unwrap_or_else(|_| policy_dir.to_path_buf());
             abs_path.display().to_string()
         } else {
             // Project config - use relative path from workspace root
@@ -198,8 +196,8 @@ impl HarnessConfig for FactoryHarness {
         // Determine the policy path to use in commands
         let policy_path = if global {
             // Global config - use absolute path
-            let abs_path =
-                fs::canonicalize(policy_dir).unwrap_or_else(|_| policy_dir.to_path_buf());
+            let abs_path = cupcake_core::ambient_fs::canonicalize(policy_dir)
+                .unwrap_or_else(|_| policy_dir.to_path_buf());
             abs_path.display().to_string()
         } else {
             // Project config - use environment variable for portability
@@ -272,7 +270,7 @@ impl OpenCodeHarness {
         };
 
         // Create plugin directory
-        fs::create_dir_all(&plugin_dir)
+        cupcake_core::fs_access::create_dir_all(&plugin_dir)
             .with_context(|| format!("Failed to create plugin directory: {plugin_dir:?}"))?;
 
         let plugin_path = plugin_dir.join("cupcake.js");
@@ -327,10 +325,8 @@ impl OpenCodeHarness {
         }
 
         // Write plugin to disk
-        let mut file = fs::File::create(&plugin_path)
-            .with_context(|| format!("Failed to create plugin file: {plugin_path:?}"))?;
-        file.write_all(&plugin_content)
-            .with_context(|| "Failed to write plugin content")?;
+        cupcake_core::fs_access::write(&plugin_path, &plugin_content)
+            .with_context(|| format!("Failed to write plugin file: {plugin_path:?}"))?;
 
         println!("   Plugin installed to: {plugin_path:?}");
 
@@ -629,7 +625,7 @@ async fn setup_harness_settings(
 ) -> Result<()> {
     // Ensure parent directory exists
     if let Some(parent) = settings_path.parent() {
-        fs::create_dir_all(parent)?;
+        cupcake_core::fs_access::create_dir_all(parent)?;
     }
 
     // Generate hook configuration
@@ -638,7 +634,7 @@ async fn setup_harness_settings(
     // Check if settings file exists
     let final_settings = if settings_path.exists() {
         // Read existing settings
-        let content = fs::read_to_string(settings_path)?;
+        let content = cupcake_core::fs_access::read_to_string(settings_path)?;
         let existing: Value = serde_json::from_str(&content)
             .map_err(|e| anyhow!("Invalid JSON in existing settings: {}", e))?;
 
@@ -654,7 +650,7 @@ async fn setup_harness_settings(
 
     // Write settings with pretty formatting
     let json_str = serde_json::to_string_pretty(&final_settings)?;
-    fs::write(settings_path, json_str)?;
+    cupcake_core::fs_access::write(settings_path, json_str)?;
 
     Ok(())
 }
