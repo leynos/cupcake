@@ -1,3 +1,5 @@
+//! Payload for the Claude Code `PreCompact` hook event.
+
 use super::{CommonEventData, CompactTrigger, EventPayload, InjectsContext};
 use serde::{Deserialize, Serialize};
 

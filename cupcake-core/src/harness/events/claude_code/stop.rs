@@ -1,3 +1,5 @@
+//! Payload for the Claude Code `Stop` hook event.
+
 use super::{CommonEventData, EventPayload};
 use serde::{Deserialize, Serialize};
 

@@ -1,3 +1,5 @@
+//! Payload for the Factory AI `UserPromptSubmit` hook event.
+
 use super::CommonFactoryData;
 use serde::{Deserialize, Serialize};
 

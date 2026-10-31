@@ -1,3 +1,5 @@
+//! Payload for the Cursor `beforeSubmitPrompt` hook event.
+
 use serde::{Deserialize, Serialize};
 
 use super::common::CommonCursorData;

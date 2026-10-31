@@ -1,3 +1,5 @@
+//! Payload for the OpenCode `PreToolUse` hook event.
+
 use super::common::CommonOpenCodeData;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

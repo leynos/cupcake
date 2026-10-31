@@ -1,3 +1,5 @@
+//! Claude Code hook event payloads and the event enum that tags them.
+
 use serde::{Deserialize, Serialize};
 
 mod notification;

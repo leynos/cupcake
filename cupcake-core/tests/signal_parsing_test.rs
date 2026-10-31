@@ -1,3 +1,5 @@
+//! Tests for parsing the JSON and string output of signals.
+
 use cupcake_core::engine::rulebook::{Rulebook, SignalConfig};
 use serde_json::{json, Value};
 

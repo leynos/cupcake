@@ -1,3 +1,5 @@
+//! Payload for the Factory AI `PreToolUse` hook event.
+
 use super::CommonFactoryData;
 use serde::{Deserialize, Serialize};
 

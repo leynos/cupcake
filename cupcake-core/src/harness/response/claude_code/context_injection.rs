@@ -1,3 +1,5 @@
+//! Response builder for Claude Code hooks that support context injection.
+
 use crate::harness::response::types::{CupcakeResponse, EngineDecision, HookSpecificOutput};
 
 /// Builder for context injection hook responses

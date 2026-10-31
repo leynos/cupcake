@@ -1,3 +1,5 @@
+//! The OpenCode plugin response and its construction from an engine decision.
+
 use serde::{Deserialize, Serialize};
 
 /// Response from Cupcake to OpenCode plugin

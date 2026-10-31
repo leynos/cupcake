@@ -1,3 +1,5 @@
+//! Response builder for Claude Code hooks that use the minimal response format.
+
 use crate::harness::response::types::{CupcakeResponse, EngineDecision};
 
 /// Builder for generic hook responses

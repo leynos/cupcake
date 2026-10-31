@@ -1,3 +1,5 @@
+//! Response builder for Factory AI hooks that feed decisions back to the agent.
+
 use crate::harness::events::factory::FactoryEvent;
 use crate::harness::response::types::{CupcakeResponse, EngineDecision, HookSpecificOutput};
 

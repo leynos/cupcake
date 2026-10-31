@@ -1,3 +1,5 @@
+//! Payload for the Cursor `afterFileEdit` hook event.
+
 use serde::{Deserialize, Serialize};
 
 use super::common::CommonCursorData;

@@ -1,3 +1,5 @@
+//! Response builder for Claude Code hooks that feed decisions back to the agent.
+
 use crate::harness::events::claude_code::ClaudeCodeEvent;
 use crate::harness::response::types::{CupcakeResponse, EngineDecision, HookSpecificOutput};
 

@@ -1,3 +1,5 @@
+//! Response builder for the Cursor `beforeSubmitPrompt` hook.
+
 use crate::harness::response::types::EngineDecision;
 use serde_json::{json, Value};
 use tracing::debug;
