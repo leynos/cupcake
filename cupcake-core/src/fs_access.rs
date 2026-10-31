@@ -9,11 +9,14 @@
 //! calls `ambient_authority`: it acquires authority over whichever parent it is
 //! given and does not confine a path to a preselected root.
 //!
-//! One behaviour differs from `std::fs`: `cap-std` resolves symlinks within the
-//! opened directory and refuses one whose target escapes it, including an
-//! absolute target. A file that is itself such a symlink now fails, and the
-//! callers treat that as they treat any other I/O error. Symlinks in the parent
-//! path are resolved by the operating system as before.
+//! `cap-std` refuses to follow a symlink whose target escapes the opened
+//! directory, including any absolute target. `std::fs` follows such links, and
+//! some callers depend on that: script inspection must read the script a
+//! symlink points at, or a symlink would hide the script from policy. So the
+//! helpers resolve a symlink in the final path component themselves, with
+//! `read_link_contents`, and then open the target's parent directory in turn.
+//! Symlinks in the directory part of the path are resolved by the operating
+//! system, as before.
 
 use std::ffi::OsStr;
 use std::io;
@@ -37,10 +40,43 @@ fn parent_and_name(path: &Path) -> io::Result<(&Path, &OsStr)> {
     Ok((parent, name))
 }
 
-/// Open the directory that holds `path` as a capability.
-fn open_parent(path: &Path) -> io::Result<(Dir, &OsStr)> {
-    let (parent, name) = parent_and_name(path)?;
-    Ok((Dir::open_ambient_dir(parent, ambient_authority())?, name))
+/// The most symlinks followed in the final path component, matching the usual
+/// operating system limit.
+const MAX_SYMLINK_HOPS: usize = 40;
+
+/// Follow symlinks in the final component of `path`, as `std::fs` does.
+///
+/// A path that does not exist, or is not a symlink, is returned unchanged so
+/// that the caller's own open reports the error or creates the file. A dangling
+/// symlink resolves to its target, which `std::fs::write` would create.
+fn resolve_final_symlinks(path: &Path) -> io::Result<PathBuf> {
+    let mut current = path.to_path_buf();
+    for _ in 0..MAX_SYMLINK_HOPS {
+        let (parent, name) = parent_and_name(&current)?;
+        let dir = Dir::open_ambient_dir(parent, ambient_authority())?;
+        match dir.symlink_metadata(name) {
+            Ok(metadata) if metadata.is_symlink() => {
+                let target = dir.read_link_contents(name)?;
+                current = parent.join(target);
+            }
+            _ => return Ok(current),
+        }
+    }
+    Err(io::Error::other(format!(
+        "too many levels of symbolic links: {}",
+        path.display()
+    )))
+}
+
+/// Open the directory that holds `path`, after following final symlinks, as a
+/// capability. Returns the directory and the file name beneath it.
+fn open_parent(path: &Path) -> io::Result<(Dir, std::ffi::OsString)> {
+    let resolved = resolve_final_symlinks(path)?;
+    let (parent, name) = parent_and_name(&resolved)?;
+    Ok((
+        Dir::open_ambient_dir(parent, ambient_authority())?,
+        name.to_os_string(),
+    ))
 }
 
 /// Read the whole file at `path` into a string.
@@ -51,7 +87,7 @@ fn open_parent(path: &Path) -> io::Result<(Dir, &OsStr)> {
 /// opened, or when the contents are not valid UTF-8.
 pub fn read_to_string(path: impl AsRef<Path>) -> io::Result<String> {
     let (dir, name) = open_parent(path.as_ref())?;
-    dir.read_to_string(name)
+    dir.read_to_string(&name)
 }
 
 /// Write `contents` to the file at `path`, creating or truncating it.
@@ -62,7 +98,7 @@ pub fn read_to_string(path: impl AsRef<Path>) -> io::Result<String> {
 /// cannot be written.
 pub fn write(path: impl AsRef<Path>, contents: impl AsRef<[u8]>) -> io::Result<()> {
     let (dir, name) = open_parent(path.as_ref())?;
-    dir.write(name, contents)
+    dir.write(&name, contents)
 }
 
 /// Create the directory at `path` and any missing ancestors.
@@ -202,5 +238,70 @@ mod tests {
         let error = read_dir(dir.path().join("absent")).expect_err("absent directory");
 
         assert_eq!(error.kind(), ErrorKind::NotFound);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_with_an_absolute_target_is_followed_for_reads_and_writes() {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let target = dir.path().join("target.txt");
+        let link = dir.path().join("link.txt");
+        write(&target, "original").expect("write target");
+        std::os::unix::fs::symlink(&target, &link).expect("symlink");
+
+        assert_eq!(
+            read_to_string(&link).expect("read through link"),
+            "original"
+        );
+
+        write(&link, "updated").expect("write through link");
+        assert_eq!(read_to_string(&target).expect("read target"), "updated");
+        assert!(link.is_symlink());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_chain_of_relative_symlinks_in_other_directories_is_followed() {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        create_dir_all(dir.path().join("a")).expect("create a");
+        create_dir_all(dir.path().join("b")).expect("create b");
+        write(dir.path().join("b").join("real.txt"), "real").expect("write real");
+        std::os::unix::fs::symlink("../b/real.txt", dir.path().join("a").join("hop.txt"))
+            .expect("first link");
+        std::os::unix::fs::symlink("a/hop.txt", dir.path().join("start.txt")).expect("second link");
+
+        assert_eq!(
+            read_to_string(dir.path().join("start.txt")).expect("read"),
+            "real"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn writing_through_a_dangling_symlink_creates_its_target() {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let target = dir.path().join("created.txt");
+        let link = dir.path().join("dangling.txt");
+        std::os::unix::fs::symlink(&target, &link).expect("symlink");
+
+        write(&link, "made").expect("write through dangling link");
+
+        assert_eq!(read_to_string(&target).expect("read target"), "made");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_loop_fails_instead_of_hanging() {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let first = dir.path().join("first");
+        let second = dir.path().join("second");
+        std::os::unix::fs::symlink(&second, &first).expect("first link");
+        std::os::unix::fs::symlink(&first, &second).expect("second link");
+
+        let error = read_to_string(&first).expect_err("loop");
+
+        assert!(error
+            .to_string()
+            .contains("too many levels of symbolic links"));
     }
 }

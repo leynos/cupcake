@@ -3,9 +3,10 @@
 //! This module implements TOB-4 defense by detecting when file paths are
 //! symbolic links and resolving them to their canonical target paths.
 
-use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::debug;
+
+use crate::ambient_fs;
 
 /// Symlink resolver for detecting and resolving symbolic links
 pub struct SymlinkResolver;
@@ -18,9 +19,8 @@ impl SymlinkResolver {
     ///
     /// Returns `true` if the path is a symlink, `false` otherwise.
     pub fn is_symlink(path: &Path) -> bool {
-        match fs::symlink_metadata(path) {
-            Ok(metadata) => {
-                let is_link = metadata.is_symlink();
+        match ambient_fs::is_symlink(path) {
+            Ok(is_link) => {
                 if is_link {
                     debug!("Detected symlink: {:?}", path);
                 }
@@ -57,7 +57,7 @@ impl SymlinkResolver {
         debug!("Attempting to resolve symlink: {:?}", resolved_path);
 
         // Try to canonicalize the path (follows all symlinks to final target)
-        match fs::canonicalize(&resolved_path) {
+        match ambient_fs::canonicalize(&resolved_path) {
             Ok(canonical) => {
                 debug!(
                     "Successfully resolved symlink: {:?} -> {:?}",
@@ -71,53 +71,50 @@ impl SymlinkResolver {
                 // - Permission denied
                 // - Path doesn't exist
                 debug!("Could not resolve symlink {:?}: {}", resolved_path, e);
-
-                // Try read_link as fallback for dangling symlinks
-                if let Ok(target) = fs::read_link(&resolved_path) {
-                    debug!(
-                        "Read dangling symlink target: {:?} -> {:?}",
-                        resolved_path, target
-                    );
-                    // Return the target path even if it doesn't exist
-                    // This allows policies to check the *intended* target
-                    //
-                    // NOTE: We return the raw symlink target joined with the parent directory:
-                    // 1. canonicalize() fails on non-existent paths (dangling symlinks)
-                    // 2. Result is ALWAYS absolute (cwd.join() at line 52 ensures this)
-                    // 3. Path preserves "../" components, e.g., "/tmp/dir/../../.cupcake/secret"
-                    // 4. IMPORTANT: Protected patterns like ".cupcake" are still detectable because:
-                    //    - The substring "/.cupcake/" appears in "/tmp/dir/../../.cupcake/secret"
-                    //    - Builtin policies use path_matches() which handles this correctly
-                    //    - Even with "../", the path never starts with "../" (always absolute)
-                    // 5. Validated in tob4_path_traversal_test.rs
-                    return Some(if target.is_absolute() {
-                        target
-                    } else if let Some(parent) = resolved_path.parent() {
-                        parent.join(target)
-                    } else {
-                        target
-                    });
-                }
-
-                // Try parent directory canonicalization as last resort
-                // This handles Write operations to non-existent files
-                if let Some(parent) = resolved_path.parent() {
-                    if parent.exists() {
-                        if let Ok(canonical_parent) = fs::canonicalize(parent) {
-                            if let Some(filename) = resolved_path.file_name() {
-                                debug!(
-                                    "Using parent directory canonicalization: {:?} + {:?}",
-                                    canonical_parent, filename
-                                );
-                                return Some(canonical_parent.join(filename));
-                            }
-                        }
-                    }
-                }
-
-                None
+                Self::resolve_unresolvable(&resolved_path)
             }
         }
+    }
+
+    /// Fall back for a path that `canonicalize` could not resolve
+    ///
+    /// Tries the raw target of a dangling symlink first, then the canonical parent
+    /// directory joined with the file name (for Write operations to non-existent files).
+    fn resolve_unresolvable(resolved_path: &Path) -> Option<PathBuf> {
+        // Try read_link as fallback for dangling symlinks
+        if let Ok(target) = ambient_fs::read_link(resolved_path) {
+            debug!(
+                "Read dangling symlink target: {:?} -> {:?}",
+                resolved_path, target
+            );
+            // Return the target path even if it doesn't exist
+            // This allows policies to check the *intended* target
+            //
+            // NOTE: We return the raw symlink target joined with the parent directory:
+            // 1. canonicalize() fails on non-existent paths (dangling symlinks)
+            // 2. Result is ALWAYS absolute (cwd.join() at line 52 ensures this)
+            // 3. Path preserves "../" components, e.g., "/tmp/dir/../../.cupcake/secret"
+            // 4. IMPORTANT: Protected patterns like ".cupcake" are still detectable because:
+            //    - The substring "/.cupcake/" appears in "/tmp/dir/../../.cupcake/secret"
+            //    - Builtin policies use path_matches() which handles this correctly
+            //    - Even with "../", the path never starts with "../" (always absolute)
+            // 5. Validated in tob4_path_traversal_test.rs
+            return Some(match resolved_path.parent() {
+                Some(parent) if !target.is_absolute() => parent.join(target),
+                _ => target,
+            });
+        }
+
+        // Try parent directory canonicalization as last resort
+        // This handles Write operations to non-existent files
+        let parent = resolved_path.parent().filter(|parent| parent.exists())?;
+        let canonical_parent = ambient_fs::canonicalize(parent).ok()?;
+        let filename = resolved_path.file_name()?;
+        debug!(
+            "Using parent directory canonicalization: {:?} + {:?}",
+            canonical_parent, filename
+        );
+        Some(canonical_parent.join(filename))
     }
 
     /// Attach canonical path metadata to the event JSON (TOB-4 always-on)
@@ -164,6 +161,7 @@ impl SymlinkResolver {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fs_access;
     use tempfile::TempDir;
 
     #[cfg(unix)]
@@ -179,7 +177,7 @@ mod tests {
         let target_path = temp_dir.path().join("target");
 
         // Create target file
-        fs::write(&target_path, "test").unwrap();
+        fs_access::write(&target_path, "test").unwrap();
 
         // Create symlink
         symlink(&target_path, &link_path).unwrap();
@@ -214,13 +212,13 @@ mod tests {
         let target_path = temp_dir.path().join("target");
 
         // Create target file
-        fs::write(&target_path, "test").unwrap();
+        fs_access::write(&target_path, "test").unwrap();
 
         // Create symlink
         symlink(&target_path, &link_path).unwrap();
 
         let resolved = SymlinkResolver::resolve_path(&link_path, None).unwrap();
-        assert_eq!(resolved, fs::canonicalize(&target_path).unwrap());
+        assert_eq!(resolved, ambient_fs::canonicalize(&target_path).unwrap());
     }
 
     #[test]
@@ -231,7 +229,7 @@ mod tests {
         let link_path = temp_dir.path().join(link_name);
 
         // Create target
-        fs::write(&target_path, "test").unwrap();
+        fs_access::write(&target_path, "test").unwrap();
 
         // Create symlink
         symlink(&target_path, &link_path).unwrap();
@@ -239,7 +237,7 @@ mod tests {
         // Resolve relative to cwd
         let resolved =
             SymlinkResolver::resolve_path(Path::new(link_name), Some(temp_dir.path())).unwrap();
-        assert_eq!(resolved, fs::canonicalize(&target_path).unwrap());
+        assert_eq!(resolved, ambient_fs::canonicalize(&target_path).unwrap());
     }
 
     #[test]

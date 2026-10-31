@@ -1,5 +1,6 @@
 //! Cupcake-Rego library exports
 
+pub mod ambient_fs;
 pub mod bindings;
 pub mod debug;
 pub mod engine;
