@@ -11,7 +11,11 @@ on:
       - "**/Cargo.toml"
       - "Cargo.lock"
       # CI workflow changes
-      - ".github/workflows/ci.yml"
+      - ".github/workflows/**"
+      - ".cargo/config.toml"
+      - "flake.nix"
+      - "scripts/check_build_standard.py"
+      - "scripts/test_check_build_standard.py"
       # Policy/fixture changes that affect tests
       - "fixtures/**"
       - "**.rego"
@@ -33,11 +37,43 @@ jobs:
           components: rustfmt
       - run: cargo fmt --all -- --check
 
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
+  build-standard:
+    name: Build standard contract
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Install mold
+        # The build standard's linker (see "The build standard" in
+        # docs/developers-guide.md). This workflow does not use shared-actions'
+        # setup-rust, so mold is installed here at the version Ubuntu 24.04 ships.
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends mold=2.30.0+dfsg-1build1
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install the pinned toolchain
+        # The contracts build under the channel rust-toolchain.toml pins.
+        run: rustup toolchain install --profile minimal
+      - name: Run the build standard contracts
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet pyyaml pytest
+          "$RUNNER_TEMP/venv/bin/python" scripts/check_build_standard.py
+          "$RUNNER_TEMP/venv/bin/python" -m pytest scripts/test_check_build_standard.py -q
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install mold
+        # The build standard's linker (see "The build standard" in
+        # docs/developers-guide.md). This workflow does not use shared-actions'
+        # setup-rust, so mold is installed here at the version Ubuntu 24.04 ships.
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends mold=2.30.0+dfsg-1build1
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -46,10 +82,18 @@ jobs:
 
   test:
     name: Unit Tests (Linux)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      - name: Install mold
+        # The build standard's linker (see "The build standard" in
+        # docs/developers-guide.md). This workflow does not use shared-actions'
+        # setup-rust, so mold is installed here at the version Ubuntu 24.04 ships.
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends mold=2.30.0+dfsg-1build1
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -93,10 +137,18 @@ jobs:
 
   test-python:
     name: Python Bindings (Linux)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      - name: Install mold
+        # The build standard's linker (see "The build standard" in
+        # docs/developers-guide.md). This workflow does not use shared-actions'
+        # setup-rust, so mold is installed here at the version Ubuntu 24.04 ships.
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends mold=2.30.0+dfsg-1build1
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable

@@ -1,3 +1,21 @@
+# The development build standard (concordat rule `rust-build-defaults`): on
+# Linux, the `mold` linker is the default for every development, test, lint
+# and typecheck build. Cargo auto-discovers this file, so a bare `cargo build`
+# gets it too. The pin is the stable `1.91.0`, so the nightly-only parallel
+# frontend flag and the Cranelift backend are not used (see "The build
+# standard" in docs/developers-guide.md).
+#
+# `-fuse-ld=mold` is a compiler-driver flag: it needs GCC 12.1 or newer, or
+# clang, as the default driver. A host with an older GCC driver rejects it even
+# with mold installed; set `-Clinker=clang` there.
+#
+# Cargo selects a single `rustflags` source rather than merging them: a
+# matching `[target.*]` table replaces `[build] rustflags` outright, and an
+# assigned `RUSTFLAGS` replaces both. The file has no `[build] rustflags`, and
+# the `justfile` recipes assign no `RUSTFLAGS`, so every recipe takes the Linux
+# table. Release, `cross` and Nix builds assign an empty `RUSTFLAGS` on purpose,
+# which displaces the table (scripts/check_build_standard.py holds all of it).
+
 [alias]
 t = "test --workspace --features cupcake-core/deterministic-tests"
 test-deterministic = "test --workspace --features cupcake-core/deterministic-tests"
@@ -11,3 +29,9 @@ codegen-units = 1     # Single codegen unit for better optimization
 strip = true          # Strip symbols for smaller binaries
 panic = "abort"       # Smaller panic handler
 opt-level = 3         # Maximum optimization
+
+# mold ships for Linux only, so the linker flag lives in a Linux-only table.
+# Other targets, macOS and Windows included, keep their
+# platform linker.
+[target.'cfg(target_os = "linux")']
+rustflags = ["-Clink-arg=-fuse-ld=mold"]

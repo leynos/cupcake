@@ -23,10 +23,18 @@ jobs:
     strategy:
       fail-fast: true # Stop immediately if any platform fails
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-24.04, macos-latest, windows-latest]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      - name: Install mold
+        # The build standard's linker (see "The build standard" in
+        # docs/developers-guide.md). This workflow does not use shared-actions'
+        # setup-rust, so mold is installed here at the version Ubuntu 24.04 ships.
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends mold=2.30.0+dfsg-1build1
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -240,6 +248,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       OPA_VERSION: v1.7.1 # Centralized OPA version
+      # A shipped artefact stays on the platform linker: an assigned RUSTFLAGS
+      # displaces the mold table in .cargo/config.toml, which the `cross`
+      # containers could not honour anyway. See "The build standard" in
+      # docs/developers-guide.md.
+      RUSTFLAGS: ""
     strategy:
       fail-fast: false
       matrix:
