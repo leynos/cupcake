@@ -5,9 +5,8 @@ use serde_json::Value;
 use tempfile::TempDir;
 
 /// The routing map JSON dumps in `debug_dir`.
-fn routing_map_json_files(debug_dir: &std::path::Path) -> Vec<std::path::PathBuf> {
-    fs_access::read_dir(debug_dir)
-        .expect("Debug directory should exist")
+fn routing_map_json_files(debug_dir: &std::path::Path) -> std::io::Result<Vec<std::path::PathBuf>> {
+    Ok(fs_access::read_dir(debug_dir)?
         .into_iter()
         .filter(|path| {
             path.file_name()
@@ -17,7 +16,7 @@ fn routing_map_json_files(debug_dir: &std::path::Path) -> Vec<std::path::PathBuf
                 .starts_with("routing_map_")
                 && path.extension() == Some(std::ffi::OsStr::new("json"))
         })
-        .collect()
+        .collect())
 }
 
 /// Helper to create a test directory with minimal Cupcake structure
@@ -326,7 +325,7 @@ async fn verify_routing(project_path: &std::path::Path, expected_key: &str, expe
         );
     }
 
-    let entries = routing_map_json_files(&debug_dir);
+    let entries = routing_map_json_files(&debug_dir).expect("Debug directory should exist");
 
     assert!(
         !entries.is_empty(),
@@ -630,7 +629,7 @@ async fn test_wildcard_policy_routing() {
     let read_start = Instant::now();
 
     let debug_dir = temp_dir.path().join(".cupcake/debug/routing");
-    let entries = routing_map_json_files(&debug_dir);
+    let entries = routing_map_json_files(&debug_dir).expect("Debug directory should exist");
 
     let json_path = &entries[0];
     let json_content = fs_access::read_to_string(json_path).unwrap();
@@ -823,7 +822,7 @@ deny contains decision if {
 
     // Read routing map
     let debug_dir = temp_dir.path().join(".cupcake/debug/routing");
-    let entries = routing_map_json_files(&debug_dir);
+    let entries = routing_map_json_files(&debug_dir).expect("Debug directory should exist");
 
     let json_path = &entries[0];
     let json_content = fs_access::read_to_string(json_path).unwrap();
