@@ -357,8 +357,15 @@ fn initialize_tracing(log_level: &LogLevel, trace_modules: &[TraceModule]) {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .context("Failed to build the async runtime")?;
+    runtime.block_on(run())
+}
+
+async fn run() -> Result<()> {
     let cli = Cli::parse();
 
     // Initialize tracing with CLI flags
@@ -603,7 +610,8 @@ async fn eval_command(
     println!("{}", serde_json::to_string(&response)?);
 
     // In strict mode, exit non-zero on blocking decisions
-    if strict && (decision.is_halt() || decision.is_blocking()) {
+    let stops_agent = decision.is_halt() || decision.is_blocking();
+    if strict && stops_agent {
         std::process::exit(1);
     }
 
@@ -1786,7 +1794,7 @@ async fn onboard_command() -> Result<()> {
     let input = input.trim().to_lowercase();
 
     // Accept empty (just Enter), 'y', or 'yes'
-    if !input.is_empty() && input != "y" && input != "yes" {
+    if !matches!(input.as_str(), "" | "y" | "yes") {
         println!("Aborted.");
         return Ok(());
     }
