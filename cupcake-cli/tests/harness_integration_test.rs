@@ -1,7 +1,7 @@
 //! Integration tests for harness configuration
 
+use cupcake_core::fs_access;
 use serde_json::{json, Value};
-use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -50,7 +50,7 @@ fn test_init_with_claude_harness_fresh() {
     assert!(settings_path.exists(), "Claude settings file not created");
 
     // Verify settings content
-    let settings_content = fs::read_to_string(&settings_path).unwrap();
+    let settings_content = fs_access::read_to_string(&settings_path).unwrap();
     let settings: Value = serde_json::from_str(&settings_content).unwrap();
 
     // Check for required hooks
@@ -75,7 +75,7 @@ fn test_init_with_claude_harness_existing_settings() {
 
     // Create existing .claude/settings.json with other settings
     let claude_dir = dir_path.join(".claude");
-    fs::create_dir_all(&claude_dir).unwrap();
+    fs_access::create_dir_all(&claude_dir).unwrap();
 
     let existing_settings = json!({
         "env": {
@@ -92,7 +92,7 @@ fn test_init_with_claude_harness_existing_settings() {
         }
     });
 
-    fs::write(
+    fs_access::write(
         claude_dir.join("settings.json"),
         serde_json::to_string_pretty(&existing_settings).unwrap(),
     )
@@ -108,7 +108,7 @@ fn test_init_with_claude_harness_existing_settings() {
     );
 
     // Read merged settings
-    let settings_content = fs::read_to_string(claude_dir.join("settings.json")).unwrap();
+    let settings_content = fs_access::read_to_string(claude_dir.join("settings.json")).unwrap();
     let settings: Value = serde_json::from_str(&settings_content).unwrap();
 
     // Verify existing settings preserved
@@ -137,7 +137,8 @@ fn test_init_with_claude_harness_duplicate_prevention() {
     assert!(output2.status.success());
 
     // Read settings
-    let settings_content = fs::read_to_string(dir_path.join(".claude/settings.json")).unwrap();
+    let settings_content =
+        fs_access::read_to_string(dir_path.join(".claude/settings.json")).unwrap();
     let settings: Value = serde_json::from_str(&settings_content).unwrap();
 
     // Should only have one PreToolUse matcher
@@ -208,7 +209,7 @@ fn test_init_global_with_claude_harness() {
         // Check for global Claude settings
         let global_settings = dir_path.join(".claude/settings.json");
         if global_settings.exists() {
-            let settings_content = fs::read_to_string(&global_settings).unwrap();
+            let settings_content = fs_access::read_to_string(&global_settings).unwrap();
             let settings: Value = serde_json::from_str(&settings_content).unwrap();
 
             // Global should use absolute paths, not $CLAUDE_PROJECT_DIR
@@ -536,7 +537,7 @@ deny contains decision if {
 "#;
 
     let policy_path = project_path.join(".cupcake/policies/cursor/continue_work.rego");
-    fs::write(&policy_path, continue_policy).expect("Failed to write policy");
+    fs_access::write(&policy_path, continue_policy).expect("Failed to write policy");
 
     let cursor_event = json!({
         "conversation_id": "test-conv-id",
@@ -604,7 +605,7 @@ deny contains decision if {
 "#;
 
     let policy_path = project_path.join(".cupcake/policies/cursor/block_prompt.rego");
-    fs::write(&policy_path, block_policy).expect("Failed to write policy");
+    fs_access::write(&policy_path, block_policy).expect("Failed to write policy");
 
     let cursor_event = json!({
         "conversation_id": "test-conv-id",
@@ -673,7 +674,7 @@ deny contains decision if {
 "#;
 
     let policy_path = project_path.join(".cupcake/policies/cursor/block_shell.rego");
-    fs::write(&policy_path, block_policy).expect("Failed to write policy");
+    fs_access::write(&policy_path, block_policy).expect("Failed to write policy");
 
     let cursor_event = json!({
         "conversation_id": "test-conv-id",

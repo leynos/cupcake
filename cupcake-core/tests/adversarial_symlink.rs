@@ -5,8 +5,8 @@
 
 use anyhow::Result;
 use cupcake_core::engine::Engine;
+use cupcake_core::fs_access;
 use serde_json::json;
-use std::fs;
 use tempfile::TempDir;
 
 /// Test that symlink creation to .cupcake is blocked
@@ -20,20 +20,20 @@ async fn test_blocks_symlink_creation_to_cupcake() -> Result<()> {
     let builtins_dir = claude_dir.join("builtins");
     let shared_system_dir = cupcake_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
-    fs::create_dir_all(&builtins_dir)?;
-    fs::create_dir_all(&shared_system_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&builtins_dir)?;
+    fs_access::create_dir_all(&shared_system_dir)?;
 
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     // Helper library includes symlink detection
     let helpers_commands = include_str!("../../fixtures/system/commands.rego");
-    fs::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
+    fs_access::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
 
     let rulebook_policy =
         include_str!("../../fixtures/claude/builtins/rulebook_security_guardrails.rego");
-    fs::write(
+    fs_access::write(
         builtins_dir.join("rulebook_security_guardrails.rego"),
         rulebook_policy,
     )?;
@@ -44,7 +44,7 @@ builtins:
     enabled: true
     message: "Symlinks to Cupcake directory are forbidden"
 "#;
-    fs::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
+    fs_access::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
 
     let empty_global = TempDir::new()?;
     let config = cupcake_core::engine::EngineConfig {
@@ -107,18 +107,18 @@ async fn test_protected_paths_block_symlinks() -> Result<()> {
     let builtins_dir = claude_dir.join("builtins");
     let shared_system_dir = cupcake_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
-    fs::create_dir_all(&builtins_dir)?;
-    fs::create_dir_all(&shared_system_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&builtins_dir)?;
+    fs_access::create_dir_all(&shared_system_dir)?;
 
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     let helpers_commands = include_str!("../../fixtures/system/commands.rego");
-    fs::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
+    fs_access::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
 
     let protected_policy = include_str!("../../fixtures/claude/builtins/protected_paths.rego");
-    fs::write(builtins_dir.join("protected_paths.rego"), protected_policy)?;
+    fs_access::write(builtins_dir.join("protected_paths.rego"), protected_policy)?;
 
     let rulebook_content = r#"
 builtins:
@@ -130,7 +130,7 @@ builtins:
       - "secrets/"
       - "config/"
 "#;
-    fs::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
+    fs_access::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
 
     let empty_global = TempDir::new()?;
     let config = cupcake_core::engine::EngineConfig {
@@ -184,20 +184,15 @@ builtins:
 #[tokio::test]
 #[cfg(unix)] // Only run on Unix systems
 async fn test_unix_permissions_defense() -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-
     let temp_dir = TempDir::new()?;
     let cupcake_dir = temp_dir.path().join(".cupcake");
 
     // Simulate cupcake init creating the directory with restricted permissions
-    fs::create_dir(&cupcake_dir)?;
-    let mut perms = fs::metadata(&cupcake_dir)?.permissions();
-    perms.set_mode(0o700); // Owner-only access
-    fs::set_permissions(&cupcake_dir, perms)?;
+    fs_access::create_dir_all(&cupcake_dir)?;
+    fs_access::set_unix_mode(&cupcake_dir, 0o700)?;
 
     // Verify permissions are set correctly
-    let metadata = fs::metadata(&cupcake_dir)?;
-    let mode = metadata.permissions().mode();
+    let mode = fs_access::unix_mode(&cupcake_dir)?;
     assert_eq!(
         mode & 0o777,
         0o700,
@@ -206,7 +201,7 @@ async fn test_unix_permissions_defense() -> Result<()> {
 
     // Create a test file inside
     let test_file = cupcake_dir.join("test.txt");
-    fs::write(&test_file, "test content")?;
+    fs_access::write(&test_file, "test content")?;
 
     // Try to create a symlink (this would fail for other users due to permissions)
     let symlink_path = temp_dir.path().join("symlink");
@@ -221,7 +216,7 @@ async fn test_unix_permissions_defense() -> Result<()> {
         assert!(symlink_path.exists());
 
         // Clean up
-        fs::remove_file(symlink_path)?;
+        fs_access::remove_file(symlink_path)?;
     }
 
     println!("Unix permissions (0o700) provide defense-in-depth against other users");
@@ -241,19 +236,19 @@ async fn test_blocks_hardlink_creation() -> Result<()> {
     let builtins_dir = claude_dir.join("builtins");
     let shared_system_dir = cupcake_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
-    fs::create_dir_all(&builtins_dir)?;
-    fs::create_dir_all(&shared_system_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&builtins_dir)?;
+    fs_access::create_dir_all(&shared_system_dir)?;
 
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     let helpers_commands = include_str!("../../fixtures/system/commands.rego");
-    fs::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
+    fs_access::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
 
     let rulebook_policy =
         include_str!("../../fixtures/claude/builtins/rulebook_security_guardrails.rego");
-    fs::write(
+    fs_access::write(
         builtins_dir.join("rulebook_security_guardrails.rego"),
         rulebook_policy,
     )?;
@@ -263,7 +258,7 @@ builtins:
   rulebook_security_guardrails:
     enabled: true
 "#;
-    fs::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
+    fs_access::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
 
     let empty_global = TempDir::new()?;
     let config = cupcake_core::engine::EngineConfig {
@@ -324,8 +319,8 @@ async fn test_path_traversal_symlink_attacks() -> Result<()> {
     let claude_dir = policies_dir.join("claude");
     let system_dir = claude_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
-    fs::create_dir_all(&claude_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&claude_dir)?;
 
     // Create a custom policy to test path normalization
     let policy = r#"
@@ -370,15 +365,15 @@ deny contains decision if {
 
     // Write helper library (should be under policies directory)
     let shared_system_dir = cupcake_dir.join("system");
-    fs::create_dir_all(&shared_system_dir)?;
+    fs_access::create_dir_all(&shared_system_dir)?;
 
     let helpers_commands = include_str!("../../fixtures/system/commands.rego");
-    fs::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
+    fs_access::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
 
-    fs::write(claude_dir.join("path_traversal.rego"), policy)?;
+    fs_access::write(claude_dir.join("path_traversal.rego"), policy)?;
 
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     let empty_global = TempDir::new()?;
     let config = cupcake_core::engine::EngineConfig {
@@ -455,19 +450,19 @@ async fn test_allows_normal_symlinks() -> Result<()> {
     let builtins_dir = claude_dir.join("builtins");
     let shared_system_dir = cupcake_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
-    fs::create_dir_all(&builtins_dir)?;
-    fs::create_dir_all(&shared_system_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&builtins_dir)?;
+    fs_access::create_dir_all(&shared_system_dir)?;
 
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     let helpers_commands = include_str!("../../fixtures/system/commands.rego");
-    fs::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
+    fs_access::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
 
     let rulebook_policy =
         include_str!("../../fixtures/claude/builtins/rulebook_security_guardrails.rego");
-    fs::write(
+    fs_access::write(
         builtins_dir.join("rulebook_security_guardrails.rego"),
         rulebook_policy,
     )?;
@@ -477,7 +472,7 @@ builtins:
   rulebook_security_guardrails:
     enabled: true
 "#;
-    fs::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
+    fs_access::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
 
     let empty_global = TempDir::new()?;
     let config = cupcake_core::engine::EngineConfig {
