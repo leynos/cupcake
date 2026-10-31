@@ -4,7 +4,6 @@
 //! This module is only available when the `watchdog` feature is enabled.
 
 use anyhow::{anyhow, Context, Result};
-use std::fs;
 use std::io::{self, Read};
 use std::path::PathBuf;
 
@@ -32,7 +31,7 @@ pub async fn run(
 ) -> Result<()> {
     // Read event JSON from file or stdin
     let event_json: serde_json::Value = if let Some(path) = input_file {
-        let content = fs::read_to_string(&path)
+        let content = cupcake_core::fs_access::read_to_string(&path)
             .with_context(|| format!("Failed to read input file: {path:?}"))?;
         serde_json::from_str(&content).context("Failed to parse input JSON")?
     } else {
