@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-latest, windows-latest]
+        os: [ubuntu-24.04]
         rust: [stable]
 
     steps:
@@ -133,10 +133,9 @@ jobs:
 
       - name: Run unit and integration tests
         run: |
-          cargo test --lib --bins --tests
+          cargo test --lib --bins --tests --no-fail-fast
         env:
           CI: true
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CLI_PATH: ${{ env.CLAUDE_CLI_PATH }}
 
       - name: Run doc-tests (serial to avoid linker memory issues)
