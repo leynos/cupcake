@@ -68,3 +68,46 @@ instead. Every Linux job that compiles Rust therefore runs on `ubuntu-24.04`
 image's package at the pinned version `mold=2.30.0+dfsg-1build1`. Move the
 workflows onto `setup-rust` with `install-mold: 'true'`, and drop these steps,
 when leynos/cupcake#1 settles the toolchain.
+
+## Lints and Whitaker
+
+`just lint` runs the Whitaker Dylint suite and then Clippy over the whole
+workspace. Install the suite once with `whitaker-installer`; the `lint-whitaker`
+recipe then runs `whitaker --all` with warnings denied (`DYLINT_RUSTFLAGS`). Set
+`WHITAKER` to use a binary outside `PATH`. The `Whitaker` job in
+`.github/workflows/ci.yml` runs the same command after the `install-whitaker`
+action from shared-actions, which is the only way CI provisions the suite.
+
+Whitaker builds its driver under its own pinned nightly toolchain, not the
+repository's `1.91.0`, so the recipe and the job remove the development flags
+(`RUSTFLAGS`, the Cranelift backend and similar) from its environment. The
+repository's `.cargo/config.toml` still applies to the build, which is why the
+job installs `mold` like the others.
+
+### Filesystem access
+
+Whitaker's `no_std_fs_operations` lint rejects `std::fs`. Library and binary
+code reaches files through `cupcake_core::fs_access`, which opens a path's
+parent as a `cap_std::fs::Dir` and acts on the file name beneath it. It is the
+one module that calls `ambient_authority`, because every path Cupcake handles
+comes from the command line, the environment or an agent's tool call. It
+follows a symlink in the final path component itself, as `std::fs` does, so
+script inspection still reads a script that a symlink points at.
+
+The symlink resolver cannot be capability-scoped: it has to learn where an
+arbitrary path really points, and `cap-std` refuses any symlink whose target is
+absolute or leaves the opened directory. Its three probes (`canonicalize`,
+`is_symlink` and `read_link`) live in `cupcake_core::ambient_fs`, the only
+module `dylint.toml` exempts. Add nothing to it without the same justification.
+
+Tests stage their fixtures through `fs_access` too, so a test that needs a new
+operation adds it there rather than calling `std::fs`.
+
+### Module size and structure
+
+Whitaker also limits modules to 400 lines (`module_max_lines`), requires every
+module to open with a `//!` comment, and flags functions with several clusters
+of nested conditionals (`bumpy_road_function`), conditions with more than two
+branches, and `expect` or panicking `unwrap_or_else` outside tests. Split a
+module into sibling files, as `engine` and `builtins` are, rather than raising
+the limit.
