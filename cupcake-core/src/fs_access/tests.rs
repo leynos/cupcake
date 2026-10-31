@@ -206,6 +206,60 @@ fn the_unix_mode_of_a_file_is_read_through_a_symlink() {
     );
 }
 
+/// Create `links` symlinks in `dir`, each pointing at the previous one, with the
+/// first pointing at `first_target`. Returns the path of the last link.
+#[cfg(unix)]
+fn link_chain(dir: &Path, first_target: &Path, links: usize) -> std::path::PathBuf {
+    let mut previous = first_target.to_path_buf();
+    for index in 1..=links {
+        let link = dir.join(format!("link{index}"));
+        std::os::unix::fs::symlink(&previous, &link).expect("symlink");
+        previous = link;
+    }
+    previous
+}
+
+#[cfg(unix)]
+#[test]
+fn chains_of_39_and_40_symlinks_resolve_and_41_fails() {
+    for (links, resolves) in [(39, true), (40, true), (41, false)] {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let target = dir.path().join("target.txt");
+        write(&target, "reached").expect("write target");
+        let last = link_chain(dir.path(), &target, links);
+
+        let result = read_to_string(&last);
+
+        assert_eq!(result.is_ok(), resolves, "{links} links: {result:?}");
+        if let Ok(content) = result {
+            assert_eq!(content, "reached");
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_write_through_a_chain_of_40_dangling_symlinks_creates_the_target() {
+    let dir = tempfile::tempdir().expect("temporary directory");
+    let target = dir.path().join("created.txt");
+    let last = link_chain(dir.path(), &target, 40);
+
+    write(&last, "made").expect("write through 40 links");
+
+    assert_eq!(read_to_string(&target).expect("read target"), "made");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_write_through_41_dangling_symlinks_fails_without_creating_the_target() {
+    let dir = tempfile::tempdir().expect("temporary directory");
+    let target = dir.path().join("created.txt");
+    let last = link_chain(dir.path(), &target, 41);
+
+    assert!(write(&last, "made").is_err());
+    assert!(!target.exists());
+}
+
 #[test]
 fn a_file_and_an_empty_directory_can_be_removed() {
     let dir = tempfile::tempdir().expect("temporary directory");
@@ -262,57 +316,4 @@ fn unix_modes_are_set_on_files_and_directories() {
         0o700
     );
     assert_eq!(super::unix_mode(&file).expect("file mode") & 0o777, 0o755);
-||||||| 720c5f8
-/// Create `links` symlinks in `dir`, each pointing at the previous one, with the
-/// first pointing at `first_target`. Returns the path of the last link.
-#[cfg(unix)]
-fn link_chain(dir: &Path, first_target: &Path, links: usize) -> std::path::PathBuf {
-    let mut previous = first_target.to_path_buf();
-    for index in 1..=links {
-        let link = dir.join(format!("link{index}"));
-        std::os::unix::fs::symlink(&previous, &link).expect("symlink");
-        previous = link;
-    }
-    previous
-}
-
-#[cfg(unix)]
-#[test]
-fn chains_of_39_and_40_symlinks_resolve_and_41_fails() {
-    for (links, resolves) in [(39, true), (40, true), (41, false)] {
-        let dir = tempfile::tempdir().expect("temporary directory");
-        let target = dir.path().join("target.txt");
-        write(&target, "reached").expect("write target");
-        let last = link_chain(dir.path(), &target, links);
-
-        let result = read_to_string(&last);
-
-        assert_eq!(result.is_ok(), resolves, "{links} links: {result:?}");
-        if let Ok(content) = result {
-            assert_eq!(content, "reached");
-        }
-    }
-}
-
-#[cfg(unix)]
-#[test]
-fn a_write_through_a_chain_of_40_dangling_symlinks_creates_the_target() {
-    let dir = tempfile::tempdir().expect("temporary directory");
-    let target = dir.path().join("created.txt");
-    let last = link_chain(dir.path(), &target, 40);
-
-    write(&last, "made").expect("write through 40 links");
-
-    assert_eq!(read_to_string(&target).expect("read target"), "made");
-}
-
-#[cfg(unix)]
-#[test]
-fn a_write_through_41_dangling_symlinks_fails_without_creating_the_target() {
-    let dir = tempfile::tempdir().expect("temporary directory");
-    let target = dir.path().join("created.txt");
-    let last = link_chain(dir.path(), &target, 41);
-
-    assert!(write(&last, "made").is_err());
-    assert!(!target.exists());
 }
