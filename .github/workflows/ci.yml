@@ -80,6 +80,30 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --all-targets --all-features -- -D warnings
 
+  whitaker:
+    name: Whitaker
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install mold
+        # The build standard's linker (see "The build standard" in
+        # docs/developers-guide.md). This workflow does not use shared-actions'
+        # setup-rust, so mold is installed here at the version Ubuntu 24.04 ships.
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends mold=2.30.0+dfsg-1build1
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Whitaker
+        uses: leynos/shared-actions/.github/actions/install-whitaker@5a99aed78ce68dcebd3052b75c31e6f173162b1e
+      - name: Run Whitaker
+        # The driver builds under its own toolchain, so the job's development
+        # flags and backend are removed from its environment, as in the
+        # justfile's `lint-whitaker` recipe.
+        run: |
+          env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS -u CARGO_PROFILE_DEV_CODEGEN_BACKEND -u CARGO_BUILD_TARGET -u CFLAGS -u LDFLAGS \
+            DYLINT_RUSTFLAGS="-D warnings" whitaker --all -- --workspace --all-targets --all-features
+
   test:
     name: Unit Tests (Linux)
     runs-on: ubuntu-24.04
