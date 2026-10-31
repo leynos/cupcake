@@ -55,6 +55,8 @@ impl PostToolUsePayload {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `post_tool_use` module.
+
     use super::*;
     use serde_json::json;
 

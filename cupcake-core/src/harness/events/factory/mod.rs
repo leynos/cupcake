@@ -178,6 +178,8 @@ impl FactoryEvent {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `factory` module.
+
     use super::*;
 
     #[test]

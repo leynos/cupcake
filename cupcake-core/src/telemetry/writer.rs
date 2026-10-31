@@ -233,6 +233,8 @@ impl TelemetryWriter {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `writer` module.
+
     use super::*;
     use crate::fs_access;
     use crate::harness::types::HarnessType;

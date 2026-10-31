@@ -53,6 +53,8 @@ impl WatchdogBackend for MockBackend {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `backend` module.
+
     use super::*;
 
     #[tokio::test]

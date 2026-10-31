@@ -45,6 +45,8 @@ impl PreCompactPayload {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `pre_compact` module.
+
     use super::*;
 
     #[test]

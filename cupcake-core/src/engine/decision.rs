@@ -253,6 +253,8 @@ impl DecisionSet {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `decision` module.
+
     use super::*;
 
     #[test]

@@ -56,6 +56,8 @@ impl SessionStartPayload {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `session_start` module.
+
     use super::*;
 
     #[test]

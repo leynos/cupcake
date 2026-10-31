@@ -63,6 +63,8 @@ impl SessionEndPayload {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `session_end` module.
+
     use super::*;
 
     #[test]

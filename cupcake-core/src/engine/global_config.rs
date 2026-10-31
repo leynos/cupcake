@@ -213,6 +213,8 @@ builtins: {}
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `global_config` module.
+
     use super::*;
     use tempfile::TempDir;
 

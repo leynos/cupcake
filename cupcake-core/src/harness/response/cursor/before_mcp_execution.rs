@@ -53,6 +53,8 @@ pub fn build(decision: &EngineDecision, agent_messages: Option<Vec<String>>) -> 
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `before_mcp_execution` module.
+
     use super::*;
 
     #[test]

@@ -84,6 +84,8 @@ impl std::str::FromStr for HarnessType {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `types` module.
+
     use super::*;
 
     #[test]

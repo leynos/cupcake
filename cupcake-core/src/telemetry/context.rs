@@ -231,6 +231,8 @@ impl Drop for TelemetryContext {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `context` module.
+
     use super::*;
     use serde_json::json;
 

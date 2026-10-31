@@ -34,6 +34,8 @@ impl StopPayload {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `stop` module.
+
     use super::*;
 
     #[test]

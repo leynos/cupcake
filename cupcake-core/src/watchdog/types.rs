@@ -92,6 +92,8 @@ impl From<WatchdogOutput> for serde_json::Value {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `types` module.
+
     use super::*;
 
     #[test]

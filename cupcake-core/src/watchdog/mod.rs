@@ -291,6 +291,8 @@ impl Watchdog {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `watchdog` module.
+
     use super::*;
 
     #[test]

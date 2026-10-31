@@ -164,6 +164,8 @@ impl WatchdogPrompts {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `prompts` module.
+
     use super::*;
     use crate::fs_access;
     use tempfile::TempDir;

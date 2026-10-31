@@ -34,6 +34,8 @@ pub fn extract_session_id(input: &serde_json::Value) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `trace` module.
+
     use super::*;
     use serde_json::json;
 

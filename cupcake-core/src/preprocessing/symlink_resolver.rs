@@ -160,6 +160,8 @@ impl SymlinkResolver {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `symlink_resolver` module.
+
     use super::*;
     use crate::fs_access;
     use tempfile::TempDir;
