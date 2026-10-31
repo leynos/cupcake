@@ -140,6 +140,42 @@ pub fn unix_mode(path: impl AsRef<Path>) -> io::Result<u32> {
     Ok(dir.metadata(&name)?.permissions().mode())
 }
 
+/// Remove the file at `path`. A symlink is removed, not the file it points at.
+///
+/// # Errors
+///
+/// Returns the I/O error when the parent directory cannot be opened or the file
+/// cannot be removed.
+pub fn remove_file(path: impl AsRef<Path>) -> io::Result<()> {
+    let (parent, name) = parent_and_name(path.as_ref())?;
+    Dir::open_ambient_dir(parent, ambient_authority())?.remove_file(name)
+}
+
+/// Remove the empty directory at `path`.
+///
+/// # Errors
+///
+/// Returns the I/O error when the parent directory cannot be opened or the
+/// directory is not empty or cannot be removed.
+pub fn remove_dir(path: impl AsRef<Path>) -> io::Result<()> {
+    let (parent, name) = parent_and_name(path.as_ref())?;
+    Dir::open_ambient_dir(parent, ambient_authority())?.remove_dir(name)
+}
+
+/// Set the Unix permission bits of the directory at `path` to `mode`.
+///
+/// # Errors
+///
+/// Returns the I/O error when the directory cannot be opened or its permissions
+/// cannot be changed.
+#[cfg(unix)]
+pub fn set_dir_mode(path: impl AsRef<Path>, mode: u32) -> io::Result<()> {
+    use cap_std::fs::{Permissions, PermissionsExt};
+
+    Dir::open_ambient_dir(path.as_ref(), ambient_authority())?
+        .set_permissions(".", Permissions::from_mode(mode))
+}
+
 #[cfg(test)]
 mod tests {
     //! Tests for the capability-based file helpers.
@@ -147,7 +183,9 @@ mod tests {
     use std::io::ErrorKind;
     use std::path::Path;
 
-    use super::{create_dir_all, parent_and_name, read_dir, read_to_string, write};
+    use super::{
+        create_dir_all, parent_and_name, read_dir, read_to_string, remove_dir, remove_file, write,
+    };
 
     #[test]
     fn a_file_round_trips_through_its_parent_directory() {
@@ -346,5 +384,57 @@ mod tests {
                 .kind(),
             ErrorKind::NotFound
         );
+    }
+
+    #[test]
+    fn a_file_and_an_empty_directory_can_be_removed() {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let file = dir.path().join("note.txt");
+        let sub = dir.path().join("sub");
+        write(&file, "x").expect("write file");
+        create_dir_all(&sub).expect("create directory");
+
+        remove_file(&file).expect("remove file");
+        remove_dir(&sub).expect("remove directory");
+
+        assert!(read_dir(dir.path()).expect("list").is_empty());
+    }
+
+    #[test]
+    fn removing_a_non_empty_directory_fails() {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let sub = dir.path().join("sub");
+        create_dir_all(&sub).expect("create directory");
+        write(sub.join("kept.txt"), "x").expect("write file");
+
+        assert!(remove_dir(&sub).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn removing_a_symlink_leaves_its_target() {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let target = dir.path().join("target.txt");
+        let link = dir.path().join("link.txt");
+        write(&target, "kept").expect("write target");
+        std::os::unix::fs::symlink(&target, &link).expect("symlink");
+
+        remove_file(&link).expect("remove link");
+
+        assert_eq!(read_to_string(&target).expect("read target"), "kept");
+        assert!(!link.is_symlink());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn directory_permissions_are_set_to_the_given_mode() {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let sub = dir.path().join("private");
+        create_dir_all(&sub).expect("create directory");
+
+        super::set_dir_mode(&sub, 0o700).expect("set mode");
+
+        let mode = super::unix_mode(&sub).expect("mode");
+        assert_eq!(mode & 0o777, 0o700);
     }
 }
