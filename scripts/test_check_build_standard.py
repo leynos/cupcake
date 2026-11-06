@@ -2,17 +2,16 @@
 
 Each mutation edits a private copy of the repository's own configuration the
 way a later change could and asserts the clause meant to catch it does. The
-Cargo-boundary tests run the pinned Cargo on a one-file binary crate that
-carries the repository's Cargo configuration and read the rustc command line,
-so the linker selection and the release override are shown on a real build.
+checks are those of ``check_build_standard``: they read the Cargo
+configuration, the workflows and the Nix builds, and none starts Cargo. The
+earlier tests that built a one-file crate to read the rustc command line were
+removed, because a test that spawns Cargo only to read build settings cannot be
+bounded or kept warm.
 """
 
 from __future__ import annotations
 
 import copy
-import os
-import shutil
-import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -133,60 +132,3 @@ def test_the_nix_builds_must_assign_an_empty_rustflags() -> None:
     flake = (ROOT / "flake.nix").read_text("utf-8")
     assert cbs.flake_problems(flake) == []
     assert cbs.flake_problems(flake.replace('RUSTFLAGS = "";', "", 1))
-
-
-def _rustc_command(tmp_path: Path, rustflags: str | None) -> str:
-    """Build a binary crate under the repository's configuration; return rustc's line."""
-    channel = tomllib.loads((ROOT / "rust-toolchain.toml").read_text("utf-8"))[
-        "toolchain"
-    ]["channel"]
-    crate = tmp_path / "boundary"
-    (crate / "src").mkdir(parents=True)
-    (crate / ".cargo").mkdir()
-    (crate / "Cargo.toml").write_text(
-        '[package]\nname = "boundary"\nversion = "0.0.0"\nedition = "2024"\n',
-        "utf-8",
-    )
-    (crate / "src" / "main.rs").write_text("fn main() {}\n", "utf-8")
-    shutil.copy(ROOT / ".cargo" / "config.toml", crate / ".cargo" / "config.toml")
-    env = {
-        k: v
-        for k, v in os.environ.items()
-        if not k.startswith(("RUSTC_", "CARGO_BUILD_RUSTC", "CARGO_ENCODED"))
-        and k != "RUSTFLAGS"
-    }
-    env["CARGO_TARGET_DIR"] = str(tmp_path / "target")
-    if rustflags is not None:
-        env["RUSTFLAGS"] = rustflags
-    result = subprocess.run(
-        ["cargo", f"+{channel}", "build", "--color", "never", "-v"],
-        cwd=crate,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, f"cargo build failed:\n{result.stderr}"
-    lines = [ln for ln in result.stderr.splitlines() if "--crate-name boundary" in ln]
-    assert lines, f"no rustc command line in Cargo's output:\n{result.stderr}"
-    return lines[0]
-
-
-linux_only = pytest.mark.skipif(
-    sys.platform != "linux" or shutil.which("mold") is None,
-    reason="the linker selection is shown on a Linux host with mold installed",
-)
-
-
-@linux_only
-def test_a_development_build_links_with_mold(tmp_path: Path) -> None:
-    """A default Cargo build on Linux carries the mold linker flag."""
-    command = _rustc_command(tmp_path, None)
-    assert "link-arg=-fuse-ld=mold" in command, f"mold must be selected: {command}"
-
-
-@linux_only
-def test_a_release_build_with_an_empty_rustflags_omits_mold(tmp_path: Path) -> None:
-    """An empty `RUSTFLAGS`, as the release build assigns, displaces the table."""
-    command = _rustc_command(tmp_path, "")
-    assert "mold" not in command, f"the platform linker must be kept: {command}"
