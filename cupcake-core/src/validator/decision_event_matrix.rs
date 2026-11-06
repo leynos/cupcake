@@ -8,11 +8,17 @@ use std::collections::HashMap;
 /// Decision verbs that policies can use
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DecisionVerb {
+    /// `halt`: stop the agent immediately; the highest-priority verb
     Halt,
+    /// `deny`: refuse the action before it runs and give Claude feedback
     Deny,
+    /// `block`: stop the action with feedback after it has already run
     Block,
+    /// `ask`: request user confirmation before the action proceeds
     Ask,
+    /// `modify`: rewrite the tool input before the action runs
     Modify,
+    /// `add_context`: inject extra context without changing the decision
     AddContext,
 }
 

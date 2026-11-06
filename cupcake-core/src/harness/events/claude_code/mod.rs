@@ -26,6 +26,8 @@ pub use user_prompt_submit::UserPromptSubmitPayload;
 
 /// Trait for all event payloads - ensures access to common data
 pub trait EventPayload {
+    /// Borrow the session fields (session id, transcript path, cwd, permission mode)
+    /// that every hook event carries.
     fn common(&self) -> &CommonEventData;
 }
 
@@ -165,40 +167,59 @@ impl std::fmt::Display for SessionSource {
 /// Specific tool input structures for common tools
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BashToolInput {
+    /// The shell command to run, exactly as the agent supplied it
     pub command: String,
+    /// Optional short summary of what the command does; absent when not supplied
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// Optional command timeout in milliseconds; absent when not supplied
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timeout: Option<u32>,
 }
 
+/// Input for the Read tool: a file to read, optionally limited to a window of lines
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReadToolInput {
+    /// Path of the file to read
     pub file_path: String,
+    /// Maximum number of lines to return, counted from `offset`; absent for no limit
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
+    /// Line number at which reading starts; absent to read from the beginning
     #[serde(skip_serializing_if = "Option::is_none")]
     pub offset: Option<u32>,
 }
 
+/// Input for the Write tool, which replaces the whole contents of a file
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WriteToolInput {
+    /// Path of the file to write
     pub file_path: String,
+    /// Complete new contents for the file
     pub content: String,
 }
 
+/// Input for the Edit tool, which performs an exact-text replacement within a file
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EditToolInput {
+    /// Path of the file to edit
     pub file_path: String,
+    /// Exact text to find in the file
     pub old_string: String,
+    /// Text that replaces `old_string`
     pub new_string: String,
+    /// Whether to replace every occurrence of `old_string` rather than only one;
+    /// `false` when absent
     #[serde(default)]
     pub replace_all: bool,
 }
 
+/// Input for the Task tool, which delegates work to a subagent
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskToolInput {
+    /// Short summary of the delegated task
     pub description: String,
+    /// Full instructions the subagent receives
     pub prompt: String,
 }
 

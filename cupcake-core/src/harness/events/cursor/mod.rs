@@ -33,15 +33,25 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "hook_event_name", rename_all = "camelCase")]
 pub enum CursorEvent {
+    /// Before a shell command runs (`beforeShellExecution`)
     BeforeShellExecution(BeforeShellExecutionPayload),
+    /// After a shell command has finished (`afterShellExecution`)
     AfterShellExecution(AfterShellExecutionPayload),
+    /// Before an MCP tool call runs (`beforeMCPExecution`)
     BeforeMCPExecution(BeforeMCPExecutionPayload),
+    /// After an MCP tool call has finished (`afterMCPExecution`)
     AfterMCPExecution(AfterMCPExecutionPayload),
+    /// After the agent has edited a file (`afterFileEdit`)
     AfterFileEdit(AfterFileEditPayload),
+    /// Before the agent reads a file, which may carry attachments (`beforeReadFile`)
     BeforeReadFile(BeforeReadFilePayload),
+    /// When the user submits a prompt, before the agent acts on it (`beforeSubmitPrompt`)
     BeforeSubmitPrompt(BeforeSubmitPromptPayload),
+    /// After the agent has produced a response (`afterAgentResponse`)
     AfterAgentResponse(AfterAgentResponsePayload),
+    /// After the agent has completed a thinking block (`afterAgentThought`)
     AfterAgentThought(AfterAgentThoughtPayload),
+    /// When the agent loop ends (`stop`)
     Stop(StopPayload),
 }
 

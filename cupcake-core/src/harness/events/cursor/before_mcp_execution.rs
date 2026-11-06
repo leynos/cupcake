@@ -9,6 +9,8 @@ use super::common::CommonCursorData;
 /// Fired before any MCP tool is executed
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BeforeMCPExecutionPayload {
+    /// Conversation, generation, workspace and user fields shared by all Cursor events,
+    /// flattened into this JSON object
     #[serde(flatten)]
     pub common: CommonCursorData,
 

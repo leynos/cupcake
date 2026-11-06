@@ -99,38 +99,52 @@ pub struct DecisionSet {
 pub enum FinalDecision {
     /// Immediate halt - highest priority
     Halt {
+        /// User-facing explanation, aggregated from the halt decisions
         reason: String,
+        /// Technical details for the agent, taken from each halt's `agent_context`
         agent_messages: Vec<String>,
     },
 
     /// Deny the action - high priority
     Deny {
+        /// User-facing explanation, aggregated from the deny decisions
         reason: String,
+        /// Technical details for the agent, taken from each deny's `agent_context`
         agent_messages: Vec<String>,
     },
 
     /// Block progression - high priority
     Block {
+        /// User-facing explanation, aggregated from the block decisions
         reason: String,
+        /// Technical details for the agent, taken from each block's `agent_context`
         agent_messages: Vec<String>,
     },
 
     /// Ask user for confirmation - medium priority
     Ask {
+        /// User-facing explanation, aggregated from the ask decisions
         reason: String,
+        /// Technical details for the agent, taken from each ask's `agent_context`
         agent_messages: Vec<String>,
     },
 
     /// Modify input and allow - medium-low priority
     /// The action proceeds with the modified input parameters
     Modify {
+        /// User-facing explanation of the merged modifications
         reason: String,
+        /// Tool input to use instead of the original, deep-merged across modifications
         updated_input: Value,
+        /// Technical details for the agent, taken from each modification's `agent_context`
         agent_messages: Vec<String>,
     },
 
     /// Allow with optional context - default
-    Allow { context: Vec<String> },
+    Allow {
+        /// Context strings from `add_context`, empty when no policy added any
+        context: Vec<String>,
+    },
 }
 
 impl FinalDecision {

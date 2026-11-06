@@ -25,6 +25,7 @@ impl std::fmt::Display for CompactTrigger {
 /// Payload for PreCompact hook events
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PreCompactPayload {
+    /// Session fields, flattened so they sit at the top level of the hook JSON
     #[serde(flatten)]
     pub common: CommonFactoryData,
 

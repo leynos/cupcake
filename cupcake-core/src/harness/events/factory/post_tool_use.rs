@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 /// Payload for PostToolUse hook events
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PostToolUsePayload {
+    /// Session, transcript, working directory and permission mode, flattened into the JSON
+    /// (camelCase keys)
     #[serde(flatten)]
     pub common: CommonFactoryData,
 

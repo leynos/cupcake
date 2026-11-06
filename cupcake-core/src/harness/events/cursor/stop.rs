@@ -10,6 +10,8 @@ use super::common::CommonCursorData;
 /// Can optionally auto-submit a follow-up user message to keep iterating.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StopPayload {
+    /// Conversation, generation, workspace and user fields shared by all Cursor events,
+    /// flattened into this JSON object
     #[serde(flatten)]
     pub common: CommonCursorData,
 

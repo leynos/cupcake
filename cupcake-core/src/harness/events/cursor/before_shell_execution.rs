@@ -9,6 +9,7 @@ use super::common::CommonCursorData;
 /// Fired before any shell command is executed
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BeforeShellExecutionPayload {
+    /// Conversation and generation identifiers shared by Cursor events, flattened into the JSON
     #[serde(flatten)]
     pub common: CommonCursorData,
 

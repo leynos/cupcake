@@ -7,8 +7,9 @@ use super::common::CommonCursorData;
 /// Attachment for prompt events
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PromptAttachment {
+    /// Attachment kind, either `file` or `rule`. Serialized as `type`.
     #[serde(rename = "type")]
-    pub attachment_type: String, // "file" or "rule"
+    pub attachment_type: String,
 
     /// The file path (Cursor uses camelCase "filePath" in JSON)
     #[serde(rename = "filePath")]
@@ -20,6 +21,8 @@ pub struct PromptAttachment {
 /// Fired right after user hits send but before backend request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BeforeSubmitPromptPayload {
+    /// Conversation, generation, workspace and user fields shared by all Cursor events,
+    /// flattened into this JSON object
     #[serde(flatten)]
     pub common: CommonCursorData,
 

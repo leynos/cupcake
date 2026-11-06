@@ -9,6 +9,7 @@ use super::common::CommonCursorData;
 /// Fired after a shell command executes; useful for auditing or collecting metrics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AfterShellExecutionPayload {
+    /// Conversation and generation identifiers shared by Cursor events, flattened into the JSON
     #[serde(flatten)]
     pub common: CommonCursorData,
 

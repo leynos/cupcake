@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 /// Payload for SessionStart hook events
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionStartPayload {
+    /// Session, transcript, working directory and permission mode, flattened into the JSON
     #[serde(flatten)]
     pub common: CommonEventData,
 
