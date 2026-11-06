@@ -1,9 +1,9 @@
 //! Integration tests for OpenCode harness
 use anyhow::Result;
 use cupcake_core::engine::{Engine, EngineConfig};
+use cupcake_core::fs_access;
 use cupcake_core::harness::types::HarnessType;
 use serde_json::json;
-use std::fs;
 use tempfile::TempDir;
 
 /// Test setup result containing both project and empty global temp dirs
@@ -19,11 +19,11 @@ async fn setup_opencode_test_project() -> Result<TestSetup> {
     let cupcake_dir = temp_dir.path().join(".cupcake");
 
     // Create OpenCode-specific directory structure
-    fs::create_dir_all(cupcake_dir.join("policies/opencode/system"))?;
-    fs::create_dir_all(cupcake_dir.join("signals"))?;
+    fs_access::create_dir_all(cupcake_dir.join("policies/opencode/system"))?;
+    fs_access::create_dir_all(cupcake_dir.join("signals"))?;
 
     // Create system evaluate policy
-    fs::write(
+    fs_access::write(
         cupcake_dir.join("policies/opencode/system/evaluate.rego"),
         r#"package cupcake.system
 
@@ -59,7 +59,7 @@ default collect_verbs(_) := []
     )?;
 
     // Create minimal rulebook
-    fs::write(
+    fs_access::write(
         cupcake_dir.join("rulebook.yml"),
         r#"version: "1.0"
 builtins: {}
@@ -104,7 +104,7 @@ deny contains decision if {
 "#;
 
     let policy_dir = setup.project_dir.path().join(".cupcake/policies/opencode");
-    fs::write(policy_dir.join("test_allow.rego"), policy_content)?;
+    fs_access::write(policy_dir.join("test_allow.rego"), policy_content)?;
 
     // Create engine - use empty temp dir to disable global config auto-discovery
     let config = EngineConfig {
@@ -165,7 +165,7 @@ deny contains decision if {
 "#;
 
     let policy_dir = setup.project_dir.path().join(".cupcake/policies/opencode");
-    fs::write(policy_dir.join("test_deny.rego"), policy_content)?;
+    fs_access::write(policy_dir.join("test_deny.rego"), policy_content)?;
 
     // Create engine - use empty temp dir to disable global config auto-discovery
     let config = EngineConfig {
@@ -225,7 +225,7 @@ add_context contains message if {
 "#;
 
     let policy_dir = setup.project_dir.path().join(".cupcake/policies/opencode");
-    fs::write(policy_dir.join("test_post.rego"), policy_content)?;
+    fs_access::write(policy_dir.join("test_post.rego"), policy_content)?;
 
     // Create engine - use empty temp dir to disable global config auto-discovery
     let config = EngineConfig {

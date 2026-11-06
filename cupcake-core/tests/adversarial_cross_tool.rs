@@ -1,12 +1,10 @@
 //! Adversarial test suite for TOB-EQTY-LAB-CUPCAKE-2
 //! Tests defenses against cross-tool bypass via tool-specific routing
 
-#![allow(unused_imports)]
-
 use anyhow::Result;
 use cupcake_core::engine::Engine;
+use cupcake_core::fs_access;
 use serde_json::json;
-use std::fs;
 use tempfile::TempDir;
 
 /// Test that protected paths block ALL file modification tools
@@ -20,21 +18,21 @@ async fn test_cross_tool_protection_coverage() -> Result<()> {
     let builtins_dir = claude_dir.join("builtins");
     let shared_system_dir = cupcake_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
-    fs::create_dir_all(&builtins_dir)?;
-    fs::create_dir_all(&shared_system_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&builtins_dir)?;
+    fs_access::create_dir_all(&shared_system_dir)?;
 
     // Write system evaluation policy
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     // Write helper library
     let helpers_commands = include_str!("../../fixtures/system/commands.rego");
-    fs::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
+    fs_access::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
 
     // Use protected_paths builtin with expanded metadata
     let protected_policy = include_str!("../../fixtures/claude/builtins/protected_paths.rego");
-    fs::write(builtins_dir.join("protected_paths.rego"), protected_policy)?;
+    fs_access::write(builtins_dir.join("protected_paths.rego"), protected_policy)?;
 
     let rulebook_content = r#"
 builtins:
@@ -46,7 +44,7 @@ builtins:
       - "database.yml"
       - ".env.prod"
 "#;
-    fs::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
+    fs_access::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
 
     let empty_global = TempDir::new()?;
     let config = cupcake_core::engine::EngineConfig {
@@ -164,20 +162,20 @@ async fn test_cupcake_protection_cross_tool() -> Result<()> {
     let builtins_dir = claude_dir.join("builtins");
     let shared_system_dir = cupcake_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
-    fs::create_dir_all(&builtins_dir)?;
-    fs::create_dir_all(&shared_system_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&builtins_dir)?;
+    fs_access::create_dir_all(&shared_system_dir)?;
 
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     let helpers_commands = include_str!("../../fixtures/system/commands.rego");
-    fs::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
+    fs_access::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
 
     // rulebook_security_guardrails should block ALL tools
     let rulebook_policy =
         include_str!("../../fixtures/claude/builtins/rulebook_security_guardrails.rego");
-    fs::write(
+    fs_access::write(
         builtins_dir.join("rulebook_security_guardrails.rego"),
         rulebook_policy,
     )?;
@@ -187,7 +185,7 @@ builtins:
   rulebook_security_guardrails:
     enabled: true
 "#;
-    fs::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
+    fs_access::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
 
     let empty_global = TempDir::new()?;
     let config = cupcake_core::engine::EngineConfig {
@@ -286,10 +284,10 @@ async fn test_narrow_policy_misses_other_tools() -> Result<()> {
     let claude_dir = policies_dir.join("claude");
     let system_dir = claude_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
 
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     // Create a policy that ONLY blocks Bash tool
     let narrow_policy = r#"
@@ -315,7 +313,7 @@ deny contains decision if {
     }
 }
 "#;
-    fs::write(claude_dir.join("narrow.rego"), narrow_policy)?;
+    fs_access::write(claude_dir.join("narrow.rego"), narrow_policy)?;
 
     let empty_global = TempDir::new()?;
     let config = cupcake_core::engine::EngineConfig {
@@ -405,10 +403,10 @@ async fn test_expanded_metadata_prevents_bypass() -> Result<()> {
     let claude_dir = policies_dir.join("claude");
     let system_dir = claude_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
 
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     // Create a policy with EXPANDED metadata covering all relevant tools
     let comprehensive_policy = r#"
@@ -463,7 +461,7 @@ sensitive_access if {
     contains(input.tool_input.pattern, "sensitive")
 }
 "#;
-    fs::write(claude_dir.join("comprehensive.rego"), comprehensive_policy)?;
+    fs_access::write(claude_dir.join("comprehensive.rego"), comprehensive_policy)?;
 
     let empty_global = TempDir::new()?;
     let config = cupcake_core::engine::EngineConfig {
@@ -555,10 +553,10 @@ async fn test_wildcard_policy_matches_all_tools() -> Result<()> {
     let claude_dir = policies_dir.join("claude");
     let system_dir = claude_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
 
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     // Create a wildcard policy (only required_events, no required_tools)
     let wildcard_policy = r#"
@@ -588,7 +586,7 @@ input_contains_sensitive if {
     value == "SENSITIVE_PATTERN"
 }
 "#;
-    fs::write(claude_dir.join("wildcard.rego"), wildcard_policy)?;
+    fs_access::write(claude_dir.join("wildcard.rego"), wildcard_policy)?;
 
     let empty_global = TempDir::new()?;
     let config = cupcake_core::engine::EngineConfig {

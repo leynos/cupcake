@@ -3,10 +3,10 @@
 //! The reviewer claims that non-canonical paths with "../" components could bypass
 //! string-based protection checks. This test validates our defense.
 
+use cupcake_core::fs_access;
 use cupcake_core::harness::types::HarnessType;
 use cupcake_core::preprocessing::{preprocess_input, PreprocessConfig};
 use serde_json::json;
-use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::symlink;
 #[cfg(windows)]
@@ -27,12 +27,12 @@ fn test_reviewer_path_traversal_concern() {
     //     nested/
     //       dir/
     let cupcake_dir = base.join(".cupcake");
-    fs::create_dir_all(&cupcake_dir).unwrap();
+    fs_access::create_dir_all(&cupcake_dir).unwrap();
     let secret_file = cupcake_dir.join("secret.txt");
-    fs::write(&secret_file, "SECRET DATA").unwrap();
+    fs_access::write(&secret_file, "SECRET DATA").unwrap();
 
     let deep_dir = base.join("deep/nested/dir");
-    fs::create_dir_all(&deep_dir).unwrap();
+    fs_access::create_dir_all(&deep_dir).unwrap();
 
     // Test Case 1: Symlink with "../" in target path
     println!("\n=== Test 1: Dangling Symlink with Path Traversal ===");
@@ -144,11 +144,11 @@ fn test_symlink_resolution_edge_cases() {
 
     // Create .cupcake directory
     let cupcake_dir = base.join(".cupcake");
-    fs::create_dir_all(&cupcake_dir).unwrap();
+    fs_access::create_dir_all(&cupcake_dir).unwrap();
 
     // Test: Symlink chain (symlink -> symlink -> target)
     let target = cupcake_dir.join("final.txt");
-    fs::write(&target, "data").unwrap();
+    fs_access::write(&target, "data").unwrap();
 
     let link1 = base.join("link1");
     let link2 = base.join("link2");
@@ -187,9 +187,9 @@ fn test_policy_protection_with_resolved_path() {
 
     // Setup
     let cupcake_dir = base.join(".cupcake");
-    fs::create_dir_all(&cupcake_dir).unwrap();
+    fs_access::create_dir_all(&cupcake_dir).unwrap();
     let protected_file = cupcake_dir.join("policies.rego");
-    fs::write(&protected_file, "package test").unwrap();
+    fs_access::write(&protected_file, "package test").unwrap();
 
     // Create malicious symlink with innocent name
     let evil_symlink = base.join("readme.txt");

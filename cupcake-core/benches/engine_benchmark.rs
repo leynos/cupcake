@@ -3,15 +3,15 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use cupcake_core::engine::Engine;
+use cupcake_core::fs_access;
 use serde_json::json;
-use std::fs;
 use tempfile::TempDir;
 
 fn create_test_policy_dir() -> TempDir {
     let temp_dir = TempDir::new().unwrap();
 
     // Create a realistic policy using new metadata format
-    fs::write(
+    fs_access::write(
         temp_dir.path().join("bash_guard.rego"),
         r#"
 # METADATA
@@ -55,8 +55,8 @@ add_context contains "Be careful with bash commands"
     .unwrap();
 
     // Create the system aggregation policy
-    fs::create_dir(temp_dir.path().join("system")).unwrap();
-    fs::write(
+    fs_access::create_dir_all(temp_dir.path().join("system")).unwrap();
+    fs_access::write(
         temp_dir.path().join("system/evaluate.rego"),
         r#"
 package cupcake.system
@@ -113,12 +113,12 @@ fn benchmark_single_evaluation(c: &mut Criterion) {
         // Debug: Print the policy directory
         eprintln!("Benchmark policy dir: {:?}", temp_dir.path());
         eprintln!("Policy files created:");
-        for e in std::fs::read_dir(temp_dir.path()).unwrap().flatten() {
-            eprintln!("  - {}", e.path().display());
+        for path in fs_access::read_dir(temp_dir.path()).unwrap() {
+            eprintln!("  - {}", path.display());
         }
-        if let Ok(system_dir) = std::fs::read_dir(temp_dir.path().join("system")) {
-            for e in system_dir.flatten() {
-                eprintln!("  - {}", e.path().display());
+        if let Ok(system_dir) = fs_access::read_dir(temp_dir.path().join("system")) {
+            for path in system_dir {
+                eprintln!("  - {}", path.display());
             }
         }
 

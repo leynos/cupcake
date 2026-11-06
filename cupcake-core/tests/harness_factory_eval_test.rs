@@ -8,14 +8,18 @@
 //! - Decision synthesis
 //! - Response formatting matching Factory AI Droid hook expectations
 
-mod common;
-use common::{create_test_project_for_harness, init_test_logging};
+#[path = "common/logging.rs"]
+mod logging;
+#[path = "common/project.rs"]
+mod project;
+use logging::init_test_logging;
+use project::create_test_project_for_harness;
 
 use anyhow::Result;
 use cupcake_core::engine::{decision::FinalDecision, Engine, EngineConfig};
+use cupcake_core::fs_access;
 use cupcake_core::harness::types::HarnessType;
 use serde_json::json;
-use std::fs;
 use tempfile::TempDir;
 
 #[tokio::test]
@@ -48,7 +52,7 @@ deny contains decision if {
 }
 "#;
 
-    fs::write(
+    fs_access::write(
         project_dir
             .path()
             .join(".cupcake/policies/factory/test_deny.rego"),
@@ -112,7 +116,7 @@ halt contains decision if {
 }
 "#;
 
-    fs::write(
+    fs_access::write(
         project_dir
             .path()
             .join(".cupcake/policies/factory/test_halt.rego"),
@@ -175,7 +179,7 @@ ask contains decision if {
 }
 "#;
 
-    fs::write(
+    fs_access::write(
         project_dir
             .path()
             .join(".cupcake/policies/factory/test_ask.rego"),
@@ -233,7 +237,7 @@ add_context contains msg if {
 }
 "#;
 
-    fs::write(
+    fs_access::write(
         project_dir
             .path()
             .join(".cupcake/policies/factory/test_context.rego"),
@@ -308,14 +312,14 @@ add_context contains msg if {
 }
 "#;
 
-    fs::write(
+    fs_access::write(
         project_dir
             .path()
             .join(".cupcake/policies/factory/specific.rego"),
         specific_policy,
     )?;
 
-    fs::write(
+    fs_access::write(
         project_dir
             .path()
             .join(".cupcake/policies/factory/wildcard.rego"),
@@ -375,7 +379,7 @@ add_context contains msg if {
 }
 "#;
 
-    fs::write(
+    fs_access::write(
         project_dir
             .path()
             .join(".cupcake/policies/factory/session.rego"),
@@ -438,7 +442,7 @@ deny contains decision if {
 }
 "#;
 
-    fs::write(
+    fs_access::write(
         project_dir
             .path()
             .join(".cupcake/policies/factory/permission_test.rego"),
@@ -514,7 +518,7 @@ add_context contains msg if {
 }
 "#;
 
-    fs::write(
+    fs_access::write(
         project_dir
             .path()
             .join(".cupcake/policies/factory/notification.rego"),
@@ -568,7 +572,7 @@ add_context contains msg if {
 }
 "#;
 
-    fs::write(
+    fs_access::write(
         project_dir
             .path()
             .join(".cupcake/policies/factory/subagent.rego"),
@@ -621,7 +625,7 @@ add_context contains msg if {
 }
 "#;
 
-    fs::write(
+    fs_access::write(
         project_dir
             .path()
             .join(".cupcake/policies/factory/compact.rego"),

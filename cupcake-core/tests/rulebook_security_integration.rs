@@ -2,12 +2,10 @@
 //!
 //! Tests the complete flow from configuration to policy enforcement
 
-#![allow(unused_imports)]
-
 use anyhow::Result;
 use cupcake_core::engine::Engine;
+use cupcake_core::fs_access;
 use serde_json::json;
-use std::fs;
 use tempfile::TempDir;
 
 /// Integration test: rulebook security prevents file operations on .cupcake/ files
@@ -23,22 +21,22 @@ async fn test_rulebook_security_blocks_cupcake_file_edits() -> Result<()> {
     let builtins_dir = claude_dir.join("builtins");
     let shared_system_dir = cupcake_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
-    fs::create_dir_all(&builtins_dir)?;
-    fs::create_dir_all(&shared_system_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&builtins_dir)?;
+    fs_access::create_dir_all(&shared_system_dir)?;
 
     // Use the authoritative system evaluation policy
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     // Write helper library (required by refactored builtins)
     let helpers_commands = include_str!("../../fixtures/system/commands.rego");
-    fs::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
+    fs_access::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
 
     // Use the actual rulebook security policy
     let rulebook_policy =
         include_str!("../../fixtures/claude/builtins/rulebook_security_guardrails.rego");
-    fs::write(
+    fs_access::write(
         builtins_dir.join("rulebook_security_guardrails.rego"),
         rulebook_policy,
     )?;
@@ -52,7 +50,7 @@ builtins:
     protected_paths:
       - ".cupcake/"
 "#;
-    fs::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
+    fs_access::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
 
     // Create the engine - use project root, not .cupcake dir
     // Disable global config to avoid interference
@@ -175,20 +173,20 @@ async fn test_rulebook_security_blocks_bash_cupcake_commands() -> Result<()> {
     let builtins_dir = claude_dir.join("builtins");
     let shared_system_dir = cupcake_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
-    fs::create_dir_all(&builtins_dir)?;
-    fs::create_dir_all(&shared_system_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&builtins_dir)?;
+    fs_access::create_dir_all(&shared_system_dir)?;
 
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     // Write helper library (required by refactored builtins)
     let helpers_commands = include_str!("../../fixtures/system/commands.rego");
-    fs::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
+    fs_access::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
 
     let rulebook_policy =
         include_str!("../../fixtures/claude/builtins/rulebook_security_guardrails.rego");
-    fs::write(
+    fs_access::write(
         builtins_dir.join("rulebook_security_guardrails.rego"),
         rulebook_policy,
     )?;
@@ -198,7 +196,7 @@ builtins:
   rulebook_security_guardrails:
     enabled: true
 "#;
-    fs::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
+    fs_access::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
 
     // Create engine without global config to avoid interference
     let empty_global = TempDir::new()?;
@@ -259,20 +257,20 @@ async fn test_rulebook_security_blocks_read_operations() -> Result<()> {
     let builtins_dir = claude_dir.join("builtins");
     let shared_system_dir = cupcake_dir.join("system");
 
-    fs::create_dir_all(&system_dir)?;
-    fs::create_dir_all(&builtins_dir)?;
-    fs::create_dir_all(&shared_system_dir)?;
+    fs_access::create_dir_all(&system_dir)?;
+    fs_access::create_dir_all(&builtins_dir)?;
+    fs_access::create_dir_all(&shared_system_dir)?;
 
     let evaluate_policy = include_str!("fixtures/system_evaluate.rego");
-    fs::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
+    fs_access::write(system_dir.join("evaluate.rego"), evaluate_policy)?;
 
     // Write helper library (required by refactored builtins)
     let helpers_commands = include_str!("../../fixtures/system/commands.rego");
-    fs::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
+    fs_access::write(shared_system_dir.join("commands.rego"), helpers_commands)?;
 
     let rulebook_policy =
         include_str!("../../fixtures/claude/builtins/rulebook_security_guardrails.rego");
-    fs::write(
+    fs_access::write(
         builtins_dir.join("rulebook_security_guardrails.rego"),
         rulebook_policy,
     )?;
@@ -283,7 +281,7 @@ builtins:
     enabled: true
     message: "Cupcake directory is completely protected"
 "#;
-    fs::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
+    fs_access::write(cupcake_dir.join("rulebook.yml"), rulebook_content)?;
 
     // Create engine without global config to avoid interference
     let empty_global = TempDir::new()?;

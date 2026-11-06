@@ -2,23 +2,28 @@
 
 use anyhow::Result;
 use cupcake_core::engine::{global_config::GlobalPaths, Engine};
+use cupcake_core::fs_access;
 use serial_test::serial;
-use std::fs;
 use tempfile::TempDir;
 
-mod common;
+#[path = "common/global_config.rs"]
+mod global_config;
+#[path = "common/logging.rs"]
+mod logging;
+#[path = "common/project.rs"]
+mod project;
 
 /// Test that engine initializes correctly without global config
 #[tokio::test]
 #[serial]
 async fn test_engine_without_global_config() -> Result<()> {
     // Initialize test logging
-    common::init_test_logging();
+    logging::init_test_logging();
 
     let project_dir = TempDir::new()?;
 
     // Create project structure using helper
-    common::create_test_project_for_harness(
+    project::create_test_project_for_harness(
         project_dir.path(),
         cupcake_core::harness::types::HarnessType::ClaudeCode,
     )?;
@@ -52,21 +57,21 @@ async fn test_engine_without_global_config() -> Result<()> {
 #[serial]
 async fn test_engine_with_global_config() -> Result<()> {
     // Initialize test logging
-    common::init_test_logging();
+    logging::init_test_logging();
 
     // Setup global config
     let global_dir = TempDir::new()?;
     let global_root = global_dir.path().to_path_buf();
 
     // Create global config structure with evaluate.rego
-    common::create_test_global_config(global_dir.path())?;
+    global_config::create_test_global_config(global_dir.path())?;
     let global_paths = GlobalPaths::discover_with_override(Some(global_root.clone()))?.unwrap();
 
     // Use helper to create global structure
-    common::create_test_global_config(&global_paths.root)?;
+    global_config::create_test_global_config(&global_paths.root)?;
 
     // Create a simple global policy
-    fs::write(
+    fs_access::write(
         global_paths.policies.join("claude/test_global.rego"),
         r#"package cupcake.global.policies.test
 
@@ -78,7 +83,7 @@ add_context contains "Global policy active"
 
     // Create project config
     let project_dir = TempDir::new()?;
-    common::create_test_project_for_harness(
+    project::create_test_project_for_harness(
         project_dir.path(),
         cupcake_core::harness::types::HarnessType::ClaudeCode,
     )?;
@@ -109,19 +114,19 @@ add_context contains "Global policy active"
 #[serial]
 async fn test_namespace_isolation() -> Result<()> {
     // Initialize test logging
-    common::init_test_logging();
+    logging::init_test_logging();
 
     // Setup global config
     let global_dir = TempDir::new()?;
     let global_root = global_dir.path().to_path_buf();
 
     // Create global config structure with evaluate.rego
-    common::create_test_global_config(global_dir.path())?;
+    global_config::create_test_global_config(global_dir.path())?;
     let global_paths = GlobalPaths::discover_with_override(Some(global_root.clone()))?.unwrap();
-    common::create_test_global_config(&global_paths.root)?;
+    global_config::create_test_global_config(&global_paths.root)?;
 
     // Create conflicting global policy (same name but global namespace)
-    fs::write(
+    fs_access::write(
         global_paths.policies.join("claude/conflict.rego"),
         r#"package cupcake.global.policies.conflict
 
@@ -133,13 +138,13 @@ test_value := "global"
 
     // Create project config
     let project_dir = TempDir::new()?;
-    common::create_test_project_for_harness(
+    project::create_test_project_for_harness(
         project_dir.path(),
         cupcake_core::harness::types::HarnessType::ClaudeCode,
     )?;
 
     // Create conflicting project policy (same base name but project namespace)
-    fs::write(
+    fs_access::write(
         project_dir
             .path()
             .join(".cupcake/policies/claude/conflict.rego"),

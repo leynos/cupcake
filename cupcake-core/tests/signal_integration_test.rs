@@ -1,10 +1,8 @@
 //! Integration tests for signals feeding policy evaluation.
 
-#![allow(unused_imports)]
-
 use cupcake_core::engine::Engine;
+use cupcake_core::fs_access;
 use serde_json::json;
-use std::fs;
 use tempfile::TempDir;
 
 #[tokio::test]
@@ -21,8 +19,8 @@ async fn test_end_to_end_signal_integration() {
     let system_dir = claude_dir.join("system");
     let signals_dir = cupcake_dir.join("signals");
 
-    fs::create_dir_all(&system_dir).unwrap();
-    fs::create_dir_all(&signals_dir).unwrap();
+    fs_access::create_dir_all(&system_dir).unwrap();
+    fs_access::create_dir_all(&signals_dir).unwrap();
 
     // Create system evaluation policy - matching fixtures/system_evaluate.rego
     let system_policy = r#"package cupcake.system
@@ -79,7 +77,7 @@ collect_verbs(verb_name) := result if {
 default collect_verbs(_) := []
 "#;
 
-    fs::write(system_dir.join("evaluate.rego"), system_policy).unwrap();
+    fs_access::write(system_dir.join("evaluate.rego"), system_policy).unwrap();
 
     // Create test policy that uses both string and structured signals
     let test_policy = r#"package cupcake.policies.integration_test
@@ -152,7 +150,7 @@ add_context contains context_msg if {
 }
 "#;
 
-    fs::write(claude_dir.join("integration_test.rego"), test_policy).unwrap();
+    fs_access::write(claude_dir.join("integration_test.rego"), test_policy).unwrap();
 
     // Create string signal (git_branch) - outputs JSON string
     let git_branch_signal = r#"#!/bin/bash
@@ -160,14 +158,11 @@ echo '"main"'
 "#;
 
     let git_branch_path = signals_dir.join("git_branch.sh");
-    fs::write(&git_branch_path, git_branch_signal).unwrap();
+    fs_access::write(&git_branch_path, git_branch_signal).unwrap();
     // Make executable
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&git_branch_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&git_branch_path, perms).unwrap();
+        fs_access::set_unix_mode(&git_branch_path, 0o755).unwrap();
     }
 
     // Create structured signal (test_status) - outputs JSON object
@@ -182,14 +177,11 @@ echo '{
 "#;
 
     let test_status_path = signals_dir.join("test_status.sh");
-    fs::write(&test_status_path, test_status_signal).unwrap();
+    fs_access::write(&test_status_path, test_status_signal).unwrap();
     // Make executable
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&test_status_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&test_status_path, perms).unwrap();
+        fs_access::set_unix_mode(&test_status_path, 0o755).unwrap();
     }
 
     // Initialize engine with test project
@@ -199,15 +191,13 @@ echo '{
 
     // List all .rego files to debug
     eprintln!("=== TEST: Listing all .rego files:");
-    for entry in std::fs::read_dir(&policies_dir).unwrap() {
-        let entry = entry.unwrap();
-        eprintln!("  - {:?}", entry.path());
+    for path in fs_access::read_dir(&policies_dir).unwrap() {
+        eprintln!("  - {path:?}");
     }
     if system_dir.exists() {
         eprintln!("=== TEST: System directory contents:");
-        for entry in std::fs::read_dir(&system_dir).unwrap() {
-            let entry = entry.unwrap();
-            eprintln!("  - {:?}", entry.path());
+        for path in fs_access::read_dir(&system_dir).unwrap() {
+            eprintln!("  - {path:?}");
         }
     }
 
@@ -323,8 +313,8 @@ async fn test_signal_json_parsing_fallback() {
     let system_dir = claude_dir.join("system");
     let signals_dir = cupcake_dir.join("signals");
 
-    fs::create_dir_all(&system_dir).unwrap();
-    fs::create_dir_all(&signals_dir).unwrap();
+    fs_access::create_dir_all(&system_dir).unwrap();
+    fs_access::create_dir_all(&signals_dir).unwrap();
 
     // Create minimal system policy - matching fixtures/system_evaluate.rego
     let system_policy = r#"package cupcake.system
@@ -367,7 +357,7 @@ collect_verbs(verb_name) := result if {
 
 default collect_verbs(_) := []
 "#;
-    fs::write(system_dir.join("evaluate.rego"), system_policy).unwrap();
+    fs_access::write(system_dir.join("evaluate.rego"), system_policy).unwrap();
 
     // Create policy that accesses a signal as string (for invalid JSON fallback test)
     let test_policy = r#"package cupcake.policies.fallback_test
@@ -390,7 +380,7 @@ add_context contains context_msg if {
 }
 "#;
 
-    fs::write(claude_dir.join("fallback_test.rego"), test_policy).unwrap();
+    fs_access::write(claude_dir.join("fallback_test.rego"), test_policy).unwrap();
 
     // Create signal that outputs invalid JSON
     let invalid_signal = r#"#!/bin/bash
@@ -398,13 +388,10 @@ echo "This is not valid JSON but should still work"
 "#;
 
     let signal_path = signals_dir.join("invalid_json_signal.sh");
-    fs::write(&signal_path, invalid_signal).unwrap();
+    fs_access::write(&signal_path, invalid_signal).unwrap();
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&signal_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&signal_path, perms).unwrap();
+        fs_access::set_unix_mode(&signal_path, 0o755).unwrap();
     }
 
     // Initialize engine

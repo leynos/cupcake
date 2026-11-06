@@ -68,3 +68,32 @@ instead. Every Linux job that compiles Rust therefore runs on `ubuntu-24.04`
 image's package at the pinned version `mold=2.30.0+dfsg-1build1`. Move the
 workflows onto `setup-rust` with `install-mold: 'true'`, and drop these steps,
 when leynos/cupcake#1 settles the toolchain.
+
+## Integration tests
+
+Integration tests under `cupcake-core/tests` and `cupcake-cli/tests` touch the
+filesystem through `cupcake_core::fs_access` (cap-std directory handles), not
+`std::fs`, so the Whitaker ambient-filesystem lint stays clean. Use
+`fs_access::write`, `read_to_string`, `create_dir_all`, `read_dir`, `unix_mode`
+and `set_unix_mode` for fixtures; `read_dir` returns paths, and a test that
+filters them by name must skip names that are not valid UTF-8 instead of
+panicking.
+
+Shared helpers sit in `cupcake-core/tests/common` and are imported by path
+(`#[path = "common/project.rs"] mod project;`) so each test binary compiles only
+the helpers it names:
+
+- `common/logging.rs`: `init_test_logging` starts test logging once.
+- `common/project.rs`: `create_test_project_for_harness` lays out a project
+  for one harness.
+- `common/global_config.rs`: `create_test_global_config` writes a global
+  configuration with test policies.
+
+A test file that outgrows the 400-line module limit moves its fixture and
+scenarios into a directory named after the file, as
+`global_builtins_integration_test/support.rs` (`setup_test_global_config`) and
+`global_builtins_integration_test/signal_tests.rs` do. Helpers that set up
+fixtures, spawn processes or look up external tools return `Result` and leave
+the `expect` to the test body that calls them; assertion helpers such as
+`verify_routing` in `claude_code_routing_test.rs` may `expect`, because a
+failed assertion there is the test failing.
