@@ -23,3 +23,6 @@ anyhow = { workspace = true }
 
 [build-dependencies]
 napi-build = "2.1"
+
+[lints.rust]
+missing_docs = "deny"

@@ -1,5 +1,9 @@
 //! Performance benchmarks for Cupcake engine
 //! Target: <50ms for complete evaluation
+#![expect(
+    missing_docs,
+    reason = "criterion_group! generates an undocumented public function"
+)]
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use cupcake_core::engine::Engine;

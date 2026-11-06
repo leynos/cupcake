@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 /// Payload for SubagentStop hook events
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubagentStopPayload {
+    /// Session, transcript, working directory and permission mode, flattened into the JSON
+    /// (camelCase keys)
     #[serde(flatten)]
     pub common: CommonFactoryData,
 

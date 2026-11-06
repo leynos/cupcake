@@ -2,6 +2,10 @@
 //!
 //! This module provides NAPI-RS bindings that wrap the core BindingEngine,
 //! exposing a JavaScript-friendly API for policy evaluation in Node.js applications.
+#![expect(
+    missing_docs,
+    reason = "the napi macros generate undocumented glue for the exported class"
+)]
 
 use cupcake_core::bindings::BindingEngine;
 use napi::bindgen_prelude::*;

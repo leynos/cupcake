@@ -62,3 +62,6 @@ path = "src/lib.rs"
 [[bench]]
 name = "engine_benchmark"
 harness = false
+
+[lints.rust]
+missing_docs = "deny"

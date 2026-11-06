@@ -32,6 +32,7 @@ pub trait WatchdogBackend: Send + Sync {
 /// Mock backend for testing
 #[cfg(test)]
 pub struct MockBackend {
+    /// Output that `evaluate` returns on every call
     pub response: WatchdogOutput,
 }
 

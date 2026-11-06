@@ -19,9 +19,12 @@ use rules::*;
 /// Severity levels for validation issues
 #[derive(Debug, Clone, PartialEq)]
 pub enum Severity {
-    Error,   // Policy won't work correctly
-    Warning, // Style or best practice issue
-    Info,    // Nice to know - suggestion
+    /// The policy will not work correctly. Counted in `total_errors`.
+    Error,
+    /// Style or best-practice issue. Counted in `total_warnings`.
+    Warning,
+    /// Advisory suggestion. Not counted in either total.
+    Info,
 }
 
 /// A validation issue found in a policy
@@ -72,17 +75,24 @@ pub struct PolicyValidator {
 /// Validation results for a single policy
 #[derive(Debug)]
 pub struct PolicyValidationResult {
+    /// Path of the policy file that was validated
     pub path: PathBuf,
+    /// Every issue found for this policy, across all rules
     pub issues: Vec<ValidationIssue>,
+    /// Number of issues with `Severity::Error`
     pub error_count: usize,
+    /// Number of issues with `Severity::Warning`. `Severity::Info` is not counted.
     pub warning_count: usize,
 }
 
 /// Validation results for multiple policies
 #[derive(Debug)]
 pub struct ValidationResult {
+    /// Per-policy results, in the order the policies were supplied
     pub policies: Vec<PolicyValidationResult>,
+    /// Sum of `error_count` across all policies
     pub total_errors: usize,
+    /// Sum of `warning_count` across all policies
     pub total_warnings: usize,
 }
 

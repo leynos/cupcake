@@ -9,6 +9,8 @@ use super::common::CommonCursorData;
 /// Fired after an MCP tool executes; includes the tool's input parameters and full JSON result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AfterMCPExecutionPayload {
+    /// Conversation, generation, workspace and user fields shared by all Cursor events,
+    /// flattened into this JSON object
     #[serde(flatten)]
     pub common: CommonCursorData,
 

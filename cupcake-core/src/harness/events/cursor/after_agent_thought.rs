@@ -10,6 +10,7 @@ use super::common::CommonCursorData;
 /// Useful for observing the agent's reasoning process.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AfterAgentThoughtPayload {
+    /// Conversation and generation identifiers shared by Cursor events, flattened into the JSON
     #[serde(flatten)]
     pub common: CommonCursorData,
 

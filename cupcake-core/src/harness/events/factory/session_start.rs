@@ -31,6 +31,8 @@ impl std::fmt::Display for SessionSource {
 /// Payload for SessionStart hook events
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionStartPayload {
+    /// Session, transcript, working directory and permission mode, flattened into the JSON
+    /// (camelCase keys)
     #[serde(flatten)]
     pub common: CommonFactoryData,
 

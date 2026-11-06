@@ -9,6 +9,8 @@ use super::common::CommonCursorData;
 /// Called after the agent has completed an assistant message
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AfterAgentResponsePayload {
+    /// Conversation, generation, workspace and user fields shared by all Cursor events,
+    /// flattened into this JSON object
     #[serde(flatten)]
     pub common: CommonCursorData,
 

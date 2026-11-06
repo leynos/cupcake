@@ -15,8 +15,10 @@ use crate::watchdog::{WatchdogConfig, WatchdogConfigInput};
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum TelemetryFormat {
+    /// One JSON span per line, written to a `.json` file (the default)
     #[default]
     Json,
+    /// Human-readable lines, written to a `.txt` file
     Text,
 }
 

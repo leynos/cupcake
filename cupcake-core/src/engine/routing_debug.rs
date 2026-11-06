@@ -18,10 +18,16 @@ use super::{Engine, PolicyUnit};
 /// Simplified policy info for serialization
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SimplifiedPolicyInfo {
+    /// Package name the policy declares in its Rego `package` line.
     pub package_name: String,
+    /// Path to the policy file, converted lossily to a string for JSON output.
     pub file_path: String,
+    /// Event names the policy is routed on, from its METADATA block (e.g. `PreToolUse`).
     pub required_events: Vec<String>,
+    /// Tool names the policy is routed on, from its METADATA block (e.g. `Bash`).
+    /// Empty when the policy names no tools.
     pub required_tools: Vec<String>,
+    /// External signals the policy requires, from its METADATA block.
     pub required_signals: Vec<String>,
 }
 
@@ -40,27 +46,41 @@ impl From<&PolicyUnit> for SimplifiedPolicyInfo {
 /// Complete routing map dump for analysis
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RoutingMapDump {
+    /// Local time of the dump, formatted `%Y-%m-%d_%H-%M-%S` like the output file names.
     pub timestamp: String,
+    /// Routing map for project-scoped policies.
     pub project: RoutingMapSection,
+    /// Routing map for global policies.
     pub global: RoutingMapSection,
+    /// Summary counts across both the project and global routing maps.
     pub statistics: RoutingStatistics,
 }
 
 /// Section of routing map (project or global)
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RoutingMapSection {
+    /// Number of policies loaded in this scope.
     pub policy_count: usize,
+    /// Routing keys (`Event`, `Event:Tool` or `Event:*`) and the policies routed under each.
     pub routing_entries: HashMap<String, Vec<SimplifiedPolicyInfo>>,
 }
 
 /// Routing statistics for analysis
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RoutingStatistics {
+    /// Routing keys across the project and global maps. A key present in both maps
+    /// is counted twice.
     pub total_routes: usize,
+    /// Keys that match every tool: `Event:*`, or an event-only key with no tool part.
     pub wildcard_routes: usize,
+    /// Keys that name a specific tool (`Event:Tool`), i.e. `total_routes - wildcard_routes`.
     pub specific_routes: usize,
+    /// Distinct event names referenced by the routing keys, in no guaranteed order.
     pub events_covered: Vec<String>,
+    /// Distinct tool names from specific keys, excluding `*`, in no guaranteed order.
     pub tools_covered: Vec<String>,
+    /// Mean number of policy entries per routing key across both maps.
+    /// `0.0` when there are no routes.
     pub average_policies_per_route: f64,
 }
 

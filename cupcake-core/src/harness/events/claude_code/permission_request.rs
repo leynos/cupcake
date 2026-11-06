@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 /// - A cleaner response format with nested `decision` object
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PermissionRequestPayload {
+    /// Session, transcript, working directory and permission mode, flattened into the JSON
     #[serde(flatten)]
     pub common: CommonEventData,
 
