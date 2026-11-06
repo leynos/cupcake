@@ -92,5 +92,8 @@ the helpers it names:
 A test file that outgrows the 400-line module limit moves its fixture and
 scenarios into a directory named after the file, as
 `global_builtins_integration_test/support.rs` (`setup_test_global_config`) and
-`global_builtins_integration_test/signal_tests.rs` do. Non-test helpers return
-`Result`; the `expect` stays in the test body that calls them.
+`global_builtins_integration_test/signal_tests.rs` do. Helpers that set up
+fixtures, spawn processes or look up external tools return `Result` and leave
+the `expect` to the test body that calls them; assertion helpers such as
+`verify_routing` in `claude_code_routing_test.rs` may `expect`, because a
+failed assertion there is the test failing.
