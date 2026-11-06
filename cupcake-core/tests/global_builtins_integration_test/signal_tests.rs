@@ -1,4 +1,4 @@
-//! Integration test for the signals that global builtins generate.
+//! Integration test for a global builtin that consumes configured signals.
 
 use anyhow::Result;
 use cupcake_core::engine::Engine;
