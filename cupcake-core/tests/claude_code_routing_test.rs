@@ -9,11 +9,10 @@ fn routing_map_json_files(debug_dir: &std::path::Path) -> std::io::Result<Vec<st
     Ok(fs_access::read_dir(debug_dir)?
         .into_iter()
         .filter(|path| {
+            // A name that is not valid UTF-8 cannot be a routing map dump, so it is skipped.
             path.file_name()
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .starts_with("routing_map_")
+                .and_then(std::ffi::OsStr::to_str)
+                .is_some_and(|name| name.starts_with("routing_map_"))
                 && path.extension() == Some(std::ffi::OsStr::new("json"))
         })
         .collect())
@@ -244,7 +243,8 @@ async fn verify_routing(project_path: &std::path::Path, expected_key: &str, expe
     fs_access::write(claude_dir.join("settings.json"), settings).unwrap();
 
     // Get claude CLI path
-    let claude_path = get_claude_path().unwrap();
+    let claude_path =
+        get_claude_path().expect("the Claude CLI path is required for the routing tests");
     eprintln!("[DEBUG] Running claude command from: {project_path:?}");
     eprintln!("[DEBUG] Claude command: {claude_path} -p 'hello world' --model sonnet");
 
@@ -585,7 +585,8 @@ async fn test_wildcard_policy_routing() {
     eprintln!("[TIMING] Settings written: {:?}", test_start.elapsed());
 
     // Get claude CLI path
-    let claude_path = get_claude_path().unwrap();
+    let claude_path =
+        get_claude_path().expect("the Claude CLI path is required for the routing tests");
     eprintln!("[TIMING] Starting Claude execution with sonnet model...");
     let claude_start = Instant::now();
 
@@ -789,7 +790,8 @@ deny contains decision if {
     fs_access::write(claude_dir.join("settings.json"), settings).unwrap();
 
     // Get claude CLI path
-    let claude_path = get_claude_path().unwrap();
+    let claude_path =
+        get_claude_path().expect("the Claude CLI path is required for the routing tests");
 
     // On Windows, PowerShell scripts (.ps1) cannot be executed directly
     let output = if cfg!(windows) && claude_path.ends_with(".ps1") {
@@ -844,4 +846,29 @@ deny contains decision if {
             .any(|p| p["package_name"].as_str().unwrap() == "cupcake.policies.test_multi");
         assert!(found, "Multi-event policy should appear in {key} key");
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn routing_map_listing_skips_names_that_are_not_utf8() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let dir = TempDir::new().expect("temp dir");
+    let odd = dir
+        .path()
+        .join(std::ffi::OsStr::from_bytes(b"routing_map_\xff.json"));
+    fs_access::write(&odd, "{}").expect("write the odd file");
+    fs_access::write(dir.path().join("routing_map_1.json"), "{}").expect("write the map");
+    fs_access::write(dir.path().join("other.json"), "{}").expect("write another file");
+
+    let found = routing_map_json_files(dir.path()).expect("list the directory");
+
+    assert_eq!(found, [dir.path().join("routing_map_1.json")]);
+}
+
+#[test]
+fn routing_map_listing_reports_a_missing_directory() {
+    let dir = TempDir::new().expect("temp dir");
+
+    assert!(routing_map_json_files(&dir.path().join("absent")).is_err());
 }

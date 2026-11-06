@@ -1,4 +1,7 @@
 //! Integration tests for global builtin policies.
+//!
+//! They check how a global builtin consumes configured signals: the shared
+//! fixture lives in `support`, and the signal scenarios in `signal_tests`.
 
 // Import only the specific helpers we need
 #[path = "common/logging.rs"]
