@@ -43,10 +43,14 @@ pull request that touches Rust or the workflows. They check that:
 - every Linux job that compiles Rust runs on `ubuntu-24.04`, the image the
   pinned package belongs to, and runs the Linux-only "Install mold" step at
   that package version before the first compile;
-- the release `build` job and both Nix builds assign an empty `RUSTFLAGS`;
-- on a Linux host, a Cargo build of a one-file crate under this configuration
-  passes `-C link-arg=-fuse-ld=mold` to rustc, and the same build with an empty
-  `RUSTFLAGS` does not.
+- the release `build` job and both Nix builds assign an empty `RUSTFLAGS`.
+
+All of these read the repository's files: no check starts Cargo. An earlier
+revision also ran the pinned Cargo on a one-file crate and read the rustc
+command line to show the linker selection on a real build. That check is gone,
+because a test that spawns Cargo only to read build settings costs a build and
+cannot be bounded or kept warm; the configuration reads above carry the
+contract.
 
 Each mutation of the configuration or the workflows (removing the flag, the
 install step or the empty `RUSTFLAGS`, floating the runner label, unpinning the

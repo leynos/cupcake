@@ -2,9 +2,11 @@
 
 Each mutation edits a private copy of the repository's own configuration the
 way a later change could and asserts the clause meant to catch it does. The
-Cargo-boundary tests run the pinned Cargo on a one-file binary crate that
-carries the repository's Cargo configuration and read the rustc command line,
-so the linker selection and the release override are shown on a real build.
+checks are those of ``check_build_standard``: they read the Cargo
+configuration, the workflows and the Nix builds, and none starts Cargo. The
+earlier tests that built a one-file crate to read the rustc command line were
+removed, because a test that spawns Cargo only to read build settings cannot be
+bounded or kept warm.
 """
 
 from __future__ import annotations
