@@ -1,0 +1,20 @@
+version: 2
+updates:
+  # Keep the pinned Rust toolchain current.
+  - package-ecosystem: "rust-toolchain"
+    directory: "/"
+    groups:
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "rust-toolchain"
+    schedule:
+      interval: "daily"
+    cooldown:
+      default-days: 7
