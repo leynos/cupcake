@@ -31,23 +31,19 @@ impl Engine {
         ));
         dot.push_str("  fontsize=16;\n\n");
 
-        // Collect unique events and tools
-        let mut events = HashSet::new();
-        let mut tools = HashSet::new();
+        let (events, tools) = Self::collect_events_and_tools(self.routing_map.keys());
 
-        for key in self.routing_map.keys() {
-            if let Some(colon_pos) = key.find(':') {
-                events.insert(&key[..colon_pos]);
-                let tool_part = &key[colon_pos + 1..];
-                if tool_part != "*" {
-                    tools.insert(tool_part);
-                }
-            } else {
-                events.insert(key.as_str());
-            }
-        }
+        Self::push_events_cluster(&mut dot, &events);
+        Self::push_tools_cluster(&mut dot, &tools);
+        self.push_policies_cluster(&mut dot);
+        self.push_routing_edges(&mut dot);
 
-        // Events cluster
+        dot.push_str("}\n");
+        dot
+    }
+
+    /// Append the events cluster.
+    fn push_events_cluster(dot: &mut String, events: &HashSet<&str>) {
         dot.push_str("  subgraph cluster_events {\n");
         dot.push_str("    label=\"Events\";\n");
         dot.push_str("    style=filled;\n");
@@ -58,29 +54,16 @@ impl Engine {
             dot.push_str(&format!("    \"event_{event}\" [label=\"{event}\"];\n"));
         }
         dot.push_str("  }\n\n");
+    }
 
-        // Tools cluster
-        if !tools.is_empty() {
-            dot.push_str("  subgraph cluster_tools {\n");
-            dot.push_str("    label=\"Tools\";\n");
-            dot.push_str("    style=filled;\n");
-            dot.push_str("    color=lightgreen;\n");
-            dot.push_str("    node [shape=diamond, style=filled, fillcolor=lightgreen];\n");
-
-            for tool in tools {
-                dot.push_str(&format!("    \"tool_{tool}\" [label=\"{tool}\"];\n"));
-            }
-            dot.push_str("  }\n\n");
-        }
-
-        // Policies cluster
+    /// Append the policies cluster, labelling each policy with a simplified name.
+    fn push_policies_cluster(&self, dot: &mut String) {
         dot.push_str("  subgraph cluster_policies {\n");
         dot.push_str("    label=\"Policies\";\n");
         dot.push_str("    style=filled;\n");
         dot.push_str("    color=lightblue;\n");
         dot.push_str("    node [shape=box, style=filled, fillcolor=lightblue];\n");
 
-        // Use simplified names for policies
         for policy in &self.policies {
             let short_name = policy
                 .package_name
@@ -92,40 +75,80 @@ impl Engine {
             ));
         }
         dot.push_str("  }\n\n");
+    }
 
-        // Add edges
+    /// Append the edges from every routing key to the policies it serves.
+    fn push_routing_edges(&self, dot: &mut String) {
         for (key, policies) in &self.routing_map {
             for policy in policies {
-                if let Some(colon_pos) = key.find(':') {
-                    let event = &key[..colon_pos];
-                    let tool = &key[colon_pos + 1..];
+                Self::push_policy_edges(dot, key, &policy.package_name);
+            }
+        }
+    }
 
-                    if tool == "*" {
-                        // Wildcard: event -> policy
-                        dot.push_str(&format!(
-                            "  \"event_{}\" -> \"policy_{}\" [label=\"*\", style=dashed];\n",
-                            event, policy.package_name
-                        ));
-                    } else {
-                        // Specific: event -> tool -> policy
-                        dot.push_str(&format!("  \"event_{event}\" -> \"tool_{tool}\";\n"));
-                        dot.push_str(&format!(
-                            "  \"tool_{}\" -> \"policy_{}\";\n",
-                            tool, policy.package_name
-                        ));
-                    }
-                } else {
-                    // Event only
-                    dot.push_str(&format!(
-                        "  \"event_{}\" -> \"policy_{}\";\n",
-                        key, policy.package_name
-                    ));
-                }
+    /// Collect the unique events and (non-wildcard) tools named by the routing keys.
+    fn collect_events_and_tools<'a>(
+        keys: impl Iterator<Item = &'a String>,
+    ) -> (HashSet<&'a str>, HashSet<&'a str>) {
+        let mut events = HashSet::new();
+        let mut tools = HashSet::new();
+
+        for key in keys {
+            let Some(colon_pos) = key.find(':') else {
+                events.insert(key.as_str());
+                continue;
+            };
+            events.insert(&key[..colon_pos]);
+            let tool_part = &key[colon_pos + 1..];
+            if tool_part != "*" {
+                tools.insert(tool_part);
             }
         }
 
-        dot.push_str("}\n");
-        dot
+        (events, tools)
+    }
+
+    /// Append the tools cluster, which is omitted when no tool is named.
+    fn push_tools_cluster(dot: &mut String, tools: &HashSet<&str>) {
+        if tools.is_empty() {
+            return;
+        }
+        dot.push_str("  subgraph cluster_tools {\n");
+        dot.push_str("    label=\"Tools\";\n");
+        dot.push_str("    style=filled;\n");
+        dot.push_str("    color=lightgreen;\n");
+        dot.push_str("    node [shape=diamond, style=filled, fillcolor=lightgreen];\n");
+
+        for tool in tools {
+            dot.push_str(&format!("    \"tool_{tool}\" [label=\"{tool}\"];\n"));
+        }
+        dot.push_str("  }\n\n");
+    }
+
+    /// Append the edges that connect one routing key to one policy.
+    fn push_policy_edges(dot: &mut String, key: &str, package_name: &str) {
+        let Some(colon_pos) = key.find(':') else {
+            // Event only
+            dot.push_str(&format!(
+                "  \"event_{key}\" -> \"policy_{package_name}\";\n"
+            ));
+            return;
+        };
+        let event = &key[..colon_pos];
+        let tool = &key[colon_pos + 1..];
+
+        if tool == "*" {
+            // Wildcard: event -> policy
+            dot.push_str(&format!(
+                "  \"event_{event}\" -> \"policy_{package_name}\" [label=\"*\", style=dashed];\n"
+            ));
+        } else {
+            // Specific: event -> tool -> policy
+            dot.push_str(&format!("  \"event_{event}\" -> \"tool_{tool}\";\n"));
+            dot.push_str(&format!(
+                "  \"tool_{tool}\" -> \"policy_{package_name}\";\n"
+            ));
+        }
     }
 
     /// Compute routing statistics

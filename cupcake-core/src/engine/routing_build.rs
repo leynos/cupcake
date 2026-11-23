@@ -92,6 +92,18 @@ impl Engine {
     ) {
         routing_map.clear();
 
+        Self::index_policies_by_route(policies, routing_map, map_type);
+        Self::spread_wildcards_to_specific_keys(routing_map);
+        Self::spread_event_only_policies_to_tool_keys(routing_map, map_type);
+        Self::log_routing_map(routing_map);
+    }
+
+    /// Add every policy to the routing map under each key its metadata declares.
+    fn index_policies_by_route(
+        policies: &[PolicyUnit],
+        routing_map: &mut HashMap<String, Vec<PolicyUnit>>,
+        map_type: &str,
+    ) {
         for policy in policies {
             // Create routing keys for this policy from metadata
             let routing_keys = routing::create_routing_key_from_metadata(&policy.routing);
@@ -108,9 +120,23 @@ impl Engine {
                 );
             }
         }
+    }
 
-        // Handle wildcard routes - also add them to specific tool lookups
-        // This allows "PreToolUse:Bash" to find both specific and wildcard policies
+    /// Keys of the form `<event_prefix>:<tool>` that are not themselves wildcards.
+    fn specific_keys_for_event(
+        routing_map: &HashMap<String, Vec<PolicyUnit>>,
+        event_prefix: &str,
+    ) -> Vec<String> {
+        routing_map
+            .keys()
+            .filter(|k| k.starts_with(&format!("{event_prefix}:")) && !k.ends_with(":*"))
+            .cloned()
+            .collect()
+    }
+
+    /// Also add wildcard routes to specific tool lookups, so that
+    /// "PreToolUse:Bash" finds both specific and wildcard policies.
+    fn spread_wildcards_to_specific_keys(routing_map: &mut HashMap<String, Vec<PolicyUnit>>) {
         let wildcard_keys: Vec<String> = routing_map
             .keys()
             .filter(|k| k.ends_with(":*"))
@@ -118,63 +144,69 @@ impl Engine {
             .collect();
 
         for wildcard_key in wildcard_keys {
-            if let Some(wildcard_policies) = routing_map.get(&wildcard_key).cloned() {
-                let event_prefix = wildcard_key.strip_suffix(":*").unwrap();
+            let Some(wildcard_policies) = routing_map.get(&wildcard_key).cloned() else {
+                continue;
+            };
+            let event_prefix = wildcard_key.strip_suffix(":*").unwrap();
 
-                // Find all specific tool keys for this event
-                let specific_keys: Vec<String> = routing_map
-                    .keys()
-                    .filter(|k| k.starts_with(&format!("{event_prefix}:")) && !k.ends_with(":*"))
-                    .cloned()
-                    .collect();
-
-                // Add wildcard policies to each specific tool key
-                for specific_key in specific_keys {
-                    routing_map
-                        .entry(specific_key)
-                        .or_default()
-                        .extend(wildcard_policies.clone());
-                }
+            for specific_key in Self::specific_keys_for_event(routing_map, event_prefix) {
+                routing_map
+                    .entry(specific_key)
+                    .or_default()
+                    .extend(wildcard_policies.clone());
             }
         }
+    }
 
-        // Handle event-only policies for tool events (PreToolUse, PostToolUse)
-        // These events ALWAYS have tools, so event-only policies are effectively wildcards
+    /// Tool events (PreToolUse, PostToolUse) always have tools, so event-only
+    /// policies are effectively wildcards: add them to each specific tool key.
+    fn spread_event_only_policies_to_tool_keys(
+        routing_map: &mut HashMap<String, Vec<PolicyUnit>>,
+        map_type: &str,
+    ) {
         const TOOL_EVENTS: &[&str] = &["PreToolUse", "PostToolUse"];
 
         for tool_event in TOOL_EVENTS {
-            if let Some(event_only_policies) = routing_map.get(*tool_event).cloned() {
-                // Find all specific tool keys for this event
-                let specific_keys: Vec<String> = routing_map
-                    .keys()
-                    .filter(|k| k.starts_with(&format!("{tool_event}:")) && !k.ends_with(":*"))
-                    .cloned()
-                    .collect();
+            let Some(event_only_policies) = routing_map.get(*tool_event).cloned() else {
+                continue;
+            };
 
-                // Add event-only policies to each specific tool key (they act as wildcards)
-                for specific_key in specific_keys {
-                    routing_map
-                        .entry(specific_key.clone())
-                        .and_modify(|policies| {
-                            // Add event-only policies if not already present
-                            for event_policy in &event_only_policies {
-                                if !policies
-                                    .iter()
-                                    .any(|p| p.package_name == event_policy.package_name)
-                                {
-                                    policies.push(event_policy.clone());
-                                    debug!(
-                                        "Added {} wildcard policy {} to specific key: {}",
-                                        map_type, event_policy.package_name, specific_key
-                                    );
-                                }
-                            }
-                        });
+            for specific_key in Self::specific_keys_for_event(routing_map, tool_event) {
+                if let Some(policies) = routing_map.get_mut(&specific_key) {
+                    Self::add_missing_policies(
+                        policies,
+                        &event_only_policies,
+                        map_type,
+                        &specific_key,
+                    );
                 }
             }
         }
+    }
 
-        // Log the routing map for verification
+    /// Append the policies not already present (matched by package name).
+    fn add_missing_policies(
+        policies: &mut Vec<PolicyUnit>,
+        candidates: &[PolicyUnit],
+        map_type: &str,
+        specific_key: &str,
+    ) {
+        for candidate in candidates {
+            if !policies
+                .iter()
+                .any(|p| p.package_name == candidate.package_name)
+            {
+                policies.push(candidate.clone());
+                debug!(
+                    "Added {} wildcard policy {} to specific key: {}",
+                    map_type, candidate.package_name, specific_key
+                );
+            }
+        }
+    }
+
+    /// Log the routing map for verification.
+    fn log_routing_map(routing_map: &HashMap<String, Vec<PolicyUnit>>) {
         for (key, policies) in routing_map {
             debug!(
                 "Route '{}' -> {} policies: [{}]",

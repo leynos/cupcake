@@ -1,22 +1,16 @@
 //! Validation rules for Cupcake policies
 
 use super::decision_event_matrix::{DecisionEventMatrix, DecisionVerb};
+use super::rule_scan::{collect_decision_verbs, collect_rule_locations, is_rule_grouped};
 use super::{PolicyContent, Severity, ValidationIssue, ValidationRule};
 use once_cell::sync::Lazy;
 use regex::Regex;
-use std::collections::HashMap;
 
 // Compile regex patterns once at startup for performance
 static OBJECT_MEMBERSHIP_PATTERN: Lazy<Regex> =
     Lazy::new(|| Regex::new(r#""[^"]+"\s+in\s+[a-zA-Z_][a-zA-Z0-9_\.]*"#).unwrap());
 
 static DECISION_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"decision\s*:=\s*\{").unwrap());
-
-static RULE_PATTERN: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^([a-zA-Z_][a-zA-Z0-9_]*)\s+contains\s+").unwrap());
-
-static VERB_PATTERN: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^([a-zA-Z_][a-zA-Z0-9_]*)\s+contains\s+").unwrap());
 
 /// Rule: Metadata with scope: package must be first in file
 pub struct MetadataPlacementRule;
@@ -245,64 +239,20 @@ impl ValidationRule for IncrementalRuleGroupingRule {
     fn check(&self, policy: &PolicyContent) -> Vec<ValidationIssue> {
         let mut issues = Vec::new();
 
-        let mut rule_locations: HashMap<String, Vec<usize>> = HashMap::new();
-
-        for (i, line) in policy.lines.iter().enumerate() {
-            let trimmed = line.trim();
-            if let Some(captures) = RULE_PATTERN.captures(trimmed) {
-                if let Some(rule_name) = captures.get(1) {
-                    let name = rule_name.as_str().to_string();
-                    rule_locations.entry(name).or_default().push(i);
-                }
-            }
-        }
-
         // Check if rules with same name are grouped
-        for (rule_name, locations) in rule_locations {
-            if locations.len() > 1 {
-                // Check if they're consecutive (allowing comments/empty lines between)
-                let mut is_grouped = true;
+        for (rule_name, mut locations) in collect_rule_locations(policy) {
+            if locations.len() < 2 {
+                continue;
+            }
+            locations.sort();
 
-                // Sort locations
-                let mut sorted_locs = locations.clone();
-                sorted_locs.sort();
-
-                // Check for significant gaps (more than just comments/whitespace)
-                for window in sorted_locs.windows(2) {
-                    let gap_start = window[0] + 1;
-                    let gap_end = window[1];
-
-                    // Check if there are other rules in between
-                    for i in gap_start..gap_end {
-                        let line = &policy.lines[i];
-                        let trimmed = line.trim();
-
-                        // If there's a different rule type in between, it's not grouped
-                        if RULE_PATTERN.is_match(trimmed) {
-                            if let Some(captures) = RULE_PATTERN.captures(trimmed) {
-                                if let Some(other_rule) = captures.get(1) {
-                                    if other_rule.as_str() != rule_name {
-                                        is_grouped = false;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if !is_grouped {
-                        break;
-                    }
-                }
-
-                if !is_grouped {
-                    issues.push(ValidationIssue {
-                        severity: Severity::Warning,
-                        rule_id: self.rule_id(),
-                        message: format!("Multiple '{rule_name}' rules should be grouped together"),
-                        line: Some(sorted_locs[0] + 1),
-                    });
-                }
+            if !is_rule_grouped(policy, &rule_name, &locations) {
+                issues.push(ValidationIssue {
+                    severity: Severity::Warning,
+                    rule_id: self.rule_id(),
+                    message: format!("Multiple '{rule_name}' rules should be grouped together"),
+                    line: Some(locations[0] + 1),
+                });
             }
         }
 
@@ -344,57 +294,59 @@ impl ValidationRule for DecisionEventCompatibilityRule {
         // Get the compatibility matrix
         let matrix = DecisionEventMatrix::new();
 
-        // Find all decision verb usages in the policy
-        let mut found_verbs: HashMap<DecisionVerb, Vec<usize>> = HashMap::new();
-
-        for (i, line) in policy.lines.iter().enumerate() {
-            let trimmed = line.trim();
-            if let Some(captures) = VERB_PATTERN.captures(trimmed) {
-                if let Some(verb_name) = captures.get(1) {
-                    if let Some(verb) = DecisionVerb::from_rego_name(verb_name.as_str()) {
-                        found_verbs.entry(verb).or_default().push(i);
-                    }
-                }
-            }
-        }
+        let found_verbs = collect_decision_verbs(policy);
 
         // Check each verb against each required event
         for event in &routing.required_events {
             for (verb, line_numbers) in &found_verbs {
-                let line = line_numbers.first().copied();
-
-                if !matrix.is_compatible(event, *verb) {
-                    // Found an incompatible combination - this is an error
-                    let reason = matrix.incompatibility_reason(event, *verb);
-
-                    issues.push(ValidationIssue {
-                        severity: Severity::Error,
-                        rule_id: self.rule_id(),
-                        message: format!(
-                            "Policy routes to '{}' events but uses incompatible '{}' decision verb. {}",
-                            event,
-                            verb.rego_name(),
-                            reason
-                        ),
-                        line: line.map(|l| l + 1),
-                    });
-                } else if let Some(deprecation_msg) = matrix.deprecation_warning(event, *verb) {
-                    // Compatible but deprecated - this is a warning
-                    issues.push(ValidationIssue {
-                        severity: Severity::Warning,
-                        rule_id: self.rule_id(),
-                        message: format!(
-                            "Deprecated: Policy routes to '{}' and uses '{}'. {}",
-                            event,
-                            verb.rego_name(),
-                            deprecation_msg
-                        ),
-                        line: line.map(|l| l + 1),
-                    });
-                }
+                let line = line_numbers.first().copied().map(|l| l + 1);
+                issues.extend(self.compatibility_issue(&matrix, event, *verb, line));
             }
         }
 
         issues
+    }
+}
+
+impl DecisionEventCompatibilityRule {
+    /// The issue for one verb routed to one event: an error if the pair is
+    /// incompatible, a warning if it is compatible but deprecated, else none.
+    fn compatibility_issue(
+        &self,
+        matrix: &DecisionEventMatrix,
+        event: &str,
+        verb: DecisionVerb,
+        line: Option<usize>,
+    ) -> Option<ValidationIssue> {
+        if !matrix.is_compatible(event, verb) {
+            // Found an incompatible combination - this is an error
+            let reason = matrix.incompatibility_reason(event, verb);
+
+            return Some(ValidationIssue {
+                severity: Severity::Error,
+                rule_id: self.rule_id(),
+                message: format!(
+                    "Policy routes to '{}' events but uses incompatible '{}' decision verb. {}",
+                    event,
+                    verb.rego_name(),
+                    reason
+                ),
+                line,
+            });
+        }
+
+        // Compatible but deprecated - this is a warning
+        let deprecation_msg = matrix.deprecation_warning(event, verb)?;
+        Some(ValidationIssue {
+            severity: Severity::Warning,
+            rule_id: self.rule_id(),
+            message: format!(
+                "Deprecated: Policy routes to '{}' and uses '{}'. {}",
+                event,
+                verb.rego_name(),
+                deprecation_msg
+            ),
+            line,
+        })
     }
 }
