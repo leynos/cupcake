@@ -10,7 +10,8 @@ use std::path::Path;
 
 use crate::engine::rulebook::TelemetryFormat;
 
-use super::span::CupcakeSpan;
+use super::span::{CupcakeSpan, PolicyPhase, SignalsPhase};
+use crate::engine::decision::{DecisionObject, DecisionSet};
 
 /// Telemetry output writer.
 pub struct TelemetryWriter;
@@ -89,145 +90,167 @@ impl TelemetryWriter {
         out.push_str(&serde_json::to_string_pretty(&span.raw_event)?);
         out.push_str("\n\n");
 
-        // Enrich Phase
-        out.push_str("----- ENRICH -----\n");
-        if let Some(ref enrich) = span.enrich {
-            out.push_str(&format!("Operations: {}\n", enrich.operations.join(", ")));
-            out.push_str(&format!("Duration: {}μs\n", enrich.duration_us));
-            out.push_str("Enriched:\n");
-            out.push_str(&serde_json::to_string_pretty(&enrich.enriched_event)?);
-            out.push_str("\n\n");
-        } else {
-            out.push_str("(not recorded)\n\n");
-        }
-
-        // Policy Phases
-        if span.phases.is_empty() {
-            out.push_str("----- POLICY PHASES -----\n");
-            out.push_str("(no phases - early exit before evaluation)\n\n");
-        } else {
-            for (i, phase) in span.phases.iter().enumerate() {
-                out.push_str(&format!(
-                    "----- PHASE {}: {} ({}) -----\n",
-                    i + 1,
-                    phase.name.to_uppercase(),
-                    phase.span_id
-                ));
-
-                // Signals
-                if let Some(ref signals) = phase.signals {
-                    out.push_str(&format!(
-                        "Signals: {} collected in {}ms\n",
-                        signals.signals.len(),
-                        signals.duration_ms
-                    ));
-                    for sig in &signals.signals {
-                        out.push_str(&format!("  - {}: {}", sig.name, sig.command));
-                        if let Some(ms) = sig.duration_ms {
-                            out.push_str(&format!(" ({ms}ms)"));
-                        }
-                        if let Some(code) = sig.exit_code {
-                            out.push_str(&format!(" [exit {code}]"));
-                        }
-                        out.push('\n');
-                        // Show result if small
-                        let result_str = serde_json::to_string(&sig.result)?;
-                        if result_str.len() < 200 {
-                            out.push_str(&format!("    → {result_str}\n"));
-                        }
-                    }
-                } else {
-                    out.push_str("Signals: none\n");
-                }
-
-                // Evaluation
-                let eval = &phase.evaluation;
-                out.push_str(&format!("Routed: {}\n", eval.routed));
-
-                if !eval.matched_policies.is_empty() {
-                    out.push_str(&format!("Matched: {}\n", eval.matched_policies.join(", ")));
-                }
-
-                if let Some(ref exit) = eval.exit_reason {
-                    out.push_str(&format!("Exit: {exit}\n"));
-                }
-
-                if let Some(ref ds) = eval.wasm_decision_set {
-                    out.push_str("WASM Results:\n");
-                    if !ds.halts.is_empty() {
-                        out.push_str(&format!("  Halts: {}\n", ds.halts.len()));
-                        for h in &ds.halts {
-                            out.push_str(&format!(
-                                "    [{}] {} ({})\n",
-                                h.rule_id, h.reason, h.severity
-                            ));
-                        }
-                    }
-                    if !ds.denials.is_empty() {
-                        out.push_str(&format!("  Denials: {}\n", ds.denials.len()));
-                        for d in &ds.denials {
-                            out.push_str(&format!(
-                                "    [{}] {} ({})\n",
-                                d.rule_id, d.reason, d.severity
-                            ));
-                        }
-                    }
-                    if !ds.blocks.is_empty() {
-                        out.push_str(&format!("  Blocks: {}\n", ds.blocks.len()));
-                        for b in &ds.blocks {
-                            out.push_str(&format!(
-                                "    [{}] {} ({})\n",
-                                b.rule_id, b.reason, b.severity
-                            ));
-                        }
-                    }
-                    if !ds.asks.is_empty() {
-                        out.push_str(&format!("  Asks: {}\n", ds.asks.len()));
-                        for a in &ds.asks {
-                            out.push_str(&format!(
-                                "    [{}] {} ({})\n",
-                                a.rule_id, a.reason, a.severity
-                            ));
-                        }
-                    }
-                    if !ds.modifications.is_empty() {
-                        out.push_str(&format!("  Modifications: {}\n", ds.modifications.len()));
-                    }
-                    if !ds.add_context.is_empty() {
-                        out.push_str(&format!("  Context: {}\n", ds.add_context.len()));
-                    }
-                }
-
-                if let Some(ref decision) = eval.final_decision {
-                    out.push_str(&format!("Decision: {decision:?}\n"));
-                }
-
-                out.push_str(&format!("Phase Duration: {}ms\n\n", phase.duration_ms));
-            }
-        }
-
-        // Response
-        out.push_str("----- RESPONSE -----\n");
-        if let Some(ref response) = span.response {
-            out.push_str(&serde_json::to_string_pretty(response)?);
-            out.push('\n');
-        } else {
-            out.push_str("(none)\n");
-        }
-        out.push('\n');
-
-        // Errors
-        if !span.errors.is_empty() {
-            out.push_str("----- ERRORS -----\n");
-            for (i, err) in span.errors.iter().enumerate() {
-                out.push_str(&format!("{}. {}\n", i + 1, err));
-            }
-            out.push('\n');
-        }
+        Self::push_enrich_section(&mut out, span)?;
+        Self::push_policy_phases(&mut out, span)?;
+        Self::push_response_section(&mut out, span)?;
+        Self::push_errors_section(&mut out, span);
 
         out.push_str(&format!("===== End [{}ms] =====\n", span.total_duration_ms));
 
         Ok(out)
+    }
+
+    /// Append the enrich phase, or a note that it was not recorded.
+    fn push_enrich_section(out: &mut String, span: &CupcakeSpan) -> Result<()> {
+        out.push_str("----- ENRICH -----\n");
+        let Some(ref enrich) = span.enrich else {
+            out.push_str("(not recorded)\n\n");
+            return Ok(());
+        };
+        out.push_str(&format!("Operations: {}\n", enrich.operations.join(", ")));
+        out.push_str(&format!("Duration: {}μs\n", enrich.duration_us));
+        out.push_str("Enriched:\n");
+        out.push_str(&serde_json::to_string_pretty(&enrich.enriched_event)?);
+        out.push_str("\n\n");
+        Ok(())
+    }
+
+    /// Append every policy phase, or a note that evaluation exited early.
+    fn push_policy_phases(out: &mut String, span: &CupcakeSpan) -> Result<()> {
+        if span.phases.is_empty() {
+            out.push_str("----- POLICY PHASES -----\n");
+            out.push_str("(no phases - early exit before evaluation)\n\n");
+            return Ok(());
+        }
+        for (i, phase) in span.phases.iter().enumerate() {
+            Self::push_phase(out, i + 1, phase)?;
+        }
+        Ok(())
+    }
+
+    /// Append one numbered policy phase: signals, evaluation and duration.
+    fn push_phase(out: &mut String, number: usize, phase: &PolicyPhase) -> Result<()> {
+        out.push_str(&format!(
+            "----- PHASE {}: {} ({}) -----\n",
+            number,
+            phase.name.to_uppercase(),
+            phase.span_id
+        ));
+
+        Self::push_signals(out, phase.signals.as_ref())?;
+        Self::push_evaluation(out, phase);
+
+        out.push_str(&format!("Phase Duration: {}ms\n\n", phase.duration_ms));
+        Ok(())
+    }
+
+    /// Append the signals collected in a phase, or `Signals: none`.
+    fn push_signals(out: &mut String, signals: Option<&SignalsPhase>) -> Result<()> {
+        let Some(signals) = signals else {
+            out.push_str("Signals: none\n");
+            return Ok(());
+        };
+        out.push_str(&format!(
+            "Signals: {} collected in {}ms\n",
+            signals.signals.len(),
+            signals.duration_ms
+        ));
+        for sig in &signals.signals {
+            out.push_str(&format!("  - {}: {}", sig.name, sig.command));
+            if let Some(ms) = sig.duration_ms {
+                out.push_str(&format!(" ({ms}ms)"));
+            }
+            if let Some(code) = sig.exit_code {
+                out.push_str(&format!(" [exit {code}]"));
+            }
+            out.push('\n');
+            // Show result if small
+            let result_str = serde_json::to_string(&sig.result)?;
+            if result_str.len() < 200 {
+                out.push_str(&format!("    → {result_str}\n"));
+            }
+        }
+        Ok(())
+    }
+
+    /// Append a phase's evaluation: routing, matches, exit reason, WASM results and decision.
+    fn push_evaluation(out: &mut String, phase: &PolicyPhase) {
+        let eval = &phase.evaluation;
+        out.push_str(&format!("Routed: {}\n", eval.routed));
+
+        if !eval.matched_policies.is_empty() {
+            out.push_str(&format!("Matched: {}\n", eval.matched_policies.join(", ")));
+        }
+
+        if let Some(ref exit) = eval.exit_reason {
+            out.push_str(&format!("Exit: {exit}\n"));
+        }
+
+        if let Some(ref ds) = eval.wasm_decision_set {
+            Self::push_wasm_results(out, ds);
+        }
+
+        if let Some(ref decision) = eval.final_decision {
+            out.push_str(&format!("Decision: {decision:?}\n"));
+        }
+    }
+
+    /// Append the WASM decision set, skipping each empty category.
+    fn push_wasm_results(out: &mut String, ds: &DecisionSet) {
+        out.push_str("WASM Results:\n");
+        Self::push_decision_group(out, "Halts", &ds.halts);
+        Self::push_decision_group(out, "Denials", &ds.denials);
+        Self::push_decision_group(out, "Blocks", &ds.blocks);
+        Self::push_decision_group(out, "Asks", &ds.asks);
+        Self::push_count_line(out, "Modifications", ds.modifications.len());
+        Self::push_count_line(out, "Context", ds.add_context.len());
+    }
+
+    /// Append a labelled count and each decision, or nothing when there are none.
+    fn push_decision_group(out: &mut String, label: &str, decisions: &[DecisionObject]) {
+        if decisions.is_empty() {
+            return;
+        }
+        out.push_str(&format!("  {label}: {}\n", decisions.len()));
+        for d in decisions {
+            out.push_str(&format!(
+                "    [{}] {} ({})\n",
+                d.rule_id, d.reason, d.severity
+            ));
+        }
+    }
+
+    /// Append a labelled count, or nothing when it is zero.
+    fn push_count_line(out: &mut String, label: &str, count: usize) {
+        if count > 0 {
+            out.push_str(&format!("  {label}: {count}\n"));
+        }
+    }
+
+    /// Append the final response, or `(none)`.
+    fn push_response_section(out: &mut String, span: &CupcakeSpan) -> Result<()> {
+        out.push_str("----- RESPONSE -----\n");
+        match span.response {
+            Some(ref response) => {
+                out.push_str(&serde_json::to_string_pretty(response)?);
+                out.push('\n');
+            }
+            None => out.push_str("(none)\n"),
+        }
+        out.push('\n');
+        Ok(())
+    }
+
+    /// Append the numbered errors, if any.
+    fn push_errors_section(out: &mut String, span: &CupcakeSpan) {
+        if span.errors.is_empty() {
+            return;
+        }
+        out.push_str("----- ERRORS -----\n");
+        for (i, err) in span.errors.iter().enumerate() {
+            out.push_str(&format!("{}. {}\n", i + 1, err));
+        }
+        out.push('\n');
     }
 }
 

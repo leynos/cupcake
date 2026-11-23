@@ -168,20 +168,7 @@ echo "Done!"
     fn test_multiple_interpreter_patterns() {
         let temp_dir = TempDir::new().unwrap();
 
-        // Create different script files
-        let scripts = vec![
-            ("deploy.sh", "#!/bin/bash\necho bash script"),
-            (
-                "script.py",
-                "#!/usr/bin/env python3\nprint('python script')",
-            ),
-            ("app.js", "console.log('node script');"),
-            ("script.rb", "puts 'ruby script'"),
-        ];
-
-        for (filename, content) in &scripts {
-            fs_access::write(temp_dir.path().join(filename), content).unwrap();
-        }
+        write_interpreter_scripts(temp_dir.path());
 
         // Test patterns that should be detected
         let test_cases = vec![
@@ -195,29 +182,51 @@ echo "Done!"
         ];
 
         for (command, expected_script) in test_cases {
-            let mut event = json!({
-                "hook_event_name": "PreToolUse",
-                "tool_name": "Bash",
-                "tool_input": {
-                    "command": command
-                },
-                "cwd": temp_dir.path().to_string_lossy()
-            });
-
-            let config = PreprocessConfig::with_script_inspection();
-            preprocess_input(&mut event, &config, HarnessType::ClaudeCode);
-
-            assert!(
-                event.get("executed_script_content").is_some(),
-                "Command '{command}' should attach script content"
-            );
-
-            let attached_path = event["executed_script_path"].as_str().unwrap();
-            assert!(
-                attached_path.contains(expected_script),
-                "Command '{command}' should detect script '{expected_script}', got '{attached_path}'"
-            );
+            assert_script_detected(temp_dir.path(), command, expected_script);
         }
+    }
+
+    /// Create one script file per interpreter under `dir`.
+    fn write_interpreter_scripts(dir: &std::path::Path) {
+        let scripts = vec![
+            ("deploy.sh", "#!/bin/bash\necho bash script"),
+            (
+                "script.py",
+                "#!/usr/bin/env python3\nprint('python script')",
+            ),
+            ("app.js", "console.log('node script');"),
+            ("script.rb", "puts 'ruby script'"),
+        ];
+
+        for (filename, content) in &scripts {
+            fs_access::write(dir.join(filename), content).unwrap();
+        }
+    }
+
+    /// Preprocess `command` in `cwd` and assert that `expected_script` was attached.
+    fn assert_script_detected(cwd: &std::path::Path, command: &str, expected_script: &str) {
+        let mut event = json!({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": command
+            },
+            "cwd": cwd.to_string_lossy()
+        });
+
+        let config = PreprocessConfig::with_script_inspection();
+        preprocess_input(&mut event, &config, HarnessType::ClaudeCode);
+
+        assert!(
+            event.get("executed_script_content").is_some(),
+            "Command '{command}' should attach script content"
+        );
+
+        let attached_path = event["executed_script_path"].as_str().unwrap();
+        assert!(
+            attached_path.contains(expected_script),
+            "Command '{command}' should detect script '{expected_script}', got '{attached_path}'"
+        );
     }
 
     /// Test that missing scripts don't cause errors

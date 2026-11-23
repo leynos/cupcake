@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use tracing::{debug, info};
 
 pub mod decision_event_matrix;
+mod rule_scan;
 pub mod rules;
 
 #[cfg(test)]

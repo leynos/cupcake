@@ -225,51 +225,62 @@ impl Engine {
         keys.sort();
 
         for key in keys {
-            let policies = &map[&key];
-
-            // Format the route key with visual distinction
-            let route_type = if key.contains(':') {
-                if key.ends_with(":*") {
-                    "[WILDCARD]"
-                } else {
-                    "[SPECIFIC]"
-                }
-            } else {
-                "[EVENT-ONLY]"
-            };
-
-            output.push_str(&format!("Route: {key} {route_type}\n"));
-            output.push_str(&format!("  Policies ({}):\n", policies.len()));
-
-            for (i, policy) in policies.iter().enumerate() {
-                output.push_str(&format!("    {}. {}\n", i + 1, policy.package_name));
-                output.push_str(&format!("       File: {}\n", policy.path.display()));
-
-                if !policy.routing.required_events.is_empty() {
-                    output.push_str(&format!(
-                        "       Events: {}\n",
-                        policy.routing.required_events.join(", ")
-                    ));
-                }
-
-                if !policy.routing.required_tools.is_empty() {
-                    output.push_str(&format!(
-                        "       Tools: {}\n",
-                        policy.routing.required_tools.join(", ")
-                    ));
-                }
-
-                if !policy.routing.required_signals.is_empty() {
-                    output.push_str(&format!(
-                        "       Signals: {}\n",
-                        policy.routing.required_signals.join(", ")
-                    ));
-                }
-            }
-            output.push('\n');
+            output.push_str(&Self::format_route(&key, &map[&key]));
         }
 
         output
+    }
+
+    /// Format one route: its key, its kind and every policy that serves it.
+    fn format_route(key: &str, policies: &[PolicyUnit]) -> String {
+        let mut output = format!("Route: {key} {}\n", Self::route_kind_label(key));
+        output.push_str(&format!("  Policies ({}):\n", policies.len()));
+
+        for (i, policy) in policies.iter().enumerate() {
+            output.push_str(&Self::format_policy_entry(i + 1, policy));
+        }
+        output.push('\n');
+
+        output
+    }
+
+    /// Label a route key with visual distinction between its three kinds.
+    fn route_kind_label(key: &str) -> &'static str {
+        if !key.contains(':') {
+            "[EVENT-ONLY]"
+        } else if key.ends_with(":*") {
+            "[WILDCARD]"
+        } else {
+            "[SPECIFIC]"
+        }
+    }
+
+    /// Format one numbered policy with its file and any declared requirements.
+    fn format_policy_entry(number: usize, policy: &PolicyUnit) -> String {
+        let mut output = format!("    {number}. {}\n", policy.package_name);
+        output.push_str(&format!("       File: {}\n", policy.path.display()));
+        output.push_str(&Self::format_requirement_line(
+            "Events",
+            &policy.routing.required_events,
+        ));
+        output.push_str(&Self::format_requirement_line(
+            "Tools",
+            &policy.routing.required_tools,
+        ));
+        output.push_str(&Self::format_requirement_line(
+            "Signals",
+            &policy.routing.required_signals,
+        ));
+
+        output
+    }
+
+    /// Format a `label: a, b` requirement line, or nothing when the list is empty.
+    fn format_requirement_line(label: &str, values: &[String]) -> String {
+        if values.is_empty() {
+            return String::new();
+        }
+        format!("       {label}: {}\n", values.join(", "))
     }
 
     /// Analyze wildcard routing patterns

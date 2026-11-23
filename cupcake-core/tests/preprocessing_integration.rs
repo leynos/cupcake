@@ -352,19 +352,13 @@ fn test_preprocessing_performance() {
     let config = PreprocessConfig::default();
 
     // Warm up
-    for _ in 0..100 {
-        let mut test_event = event.clone();
-        preprocess_input(&mut test_event, &config, HarnessType::ClaudeCode);
-    }
+    preprocess_repeatedly(&event, &config, 100);
 
     // Measure
     let iterations = 10000;
     let start = Instant::now();
 
-    for _ in 0..iterations {
-        let mut test_event = event.clone();
-        preprocess_input(&mut test_event, &config, HarnessType::ClaudeCode);
-    }
+    preprocess_repeatedly(&event, &config, iterations);
 
     let duration = start.elapsed();
     let per_iteration = duration.as_micros() as f64 / iterations as f64;
@@ -376,4 +370,12 @@ fn test_preprocessing_performance() {
         per_iteration < 100.0,
         "Preprocessing too slow: {per_iteration:.2}μs per iteration"
     );
+}
+
+/// Preprocess a fresh clone of `event` `iterations` times.
+fn preprocess_repeatedly(event: &serde_json::Value, config: &PreprocessConfig, iterations: usize) {
+    for _ in 0..iterations {
+        let mut test_event = event.clone();
+        preprocess_input(&mut test_event, config, HarnessType::ClaudeCode);
+    }
 }

@@ -23,46 +23,59 @@ use std::path::Path;
 pub fn migrate_helpers_to_system(helpers_dir: &Path, system_dir: &Path) -> Result<()> {
     // Move any .rego files from helpers/ to system/
     for path in fs_access::read_dir(helpers_dir)? {
-        if path.is_file() {
-            if let Some(ext) = path.extension() {
-                if ext == "rego" {
-                    let file_name = path.file_name().unwrap();
-                    let dest = system_dir.join(file_name);
-
-                    // Read the file content and update the package declaration
-                    let content = fs_access::read_to_string(&path)?;
-                    let updated_content =
-                        content.replace("package cupcake.helpers.", "package cupcake.system.");
-
-                    // Write to system/ with updated package
-                    fs_access::write(&dest, updated_content).with_context(|| {
-                        format!("Failed to migrate {} to system/", path.display())
-                    })?;
-
-                    // Remove the old file
-                    fs_access::remove_file(&path).with_context(|| {
-                        format!("Failed to remove old helpers file {}", path.display())
-                    })?;
-
-                    eprintln!("  Migrated: {} -> {}", path.display(), dest.display());
-                }
-            }
+        if is_rego_file(&path) {
+            migrate_rego_file(&path, system_dir)?;
         }
     }
 
     // Update all policy files to use new import paths
     let policies_dir = helpers_dir.parent().unwrap().join("policies");
-    if policies_dir.exists() {
-        update_policy_imports(&policies_dir)?;
-    }
+    update_policy_imports_if_present(&policies_dir)?;
 
-    // Remove the now-empty helpers directory
+    remove_helpers_dir_if_empty(helpers_dir)
+}
+
+/// Update imports in the policies directory, if the project has one.
+fn update_policy_imports_if_present(policies_dir: &Path) -> Result<()> {
+    if policies_dir.exists() {
+        update_policy_imports(policies_dir)?;
+    }
+    Ok(())
+}
+
+/// Remove the helpers directory once every file has been migrated out of it.
+fn remove_helpers_dir_if_empty(helpers_dir: &Path) -> Result<()> {
     if fs_access::read_dir(helpers_dir)?.is_empty() {
         fs_access::remove_dir(helpers_dir)
             .with_context(|| "Failed to remove empty helpers directory")?;
         eprintln!("  Removed empty helpers/ directory");
     }
+    Ok(())
+}
 
+/// Whether `path` is a regular file with the `rego` extension.
+fn is_rego_file(path: &Path) -> bool {
+    path.is_file() && path.extension().is_some_and(|ext| ext == "rego")
+}
+
+/// Move one helpers file into system/, updating its package declaration.
+fn migrate_rego_file(path: &Path, system_dir: &Path) -> Result<()> {
+    let file_name = path.file_name().unwrap();
+    let dest = system_dir.join(file_name);
+
+    // Read the file content and update the package declaration
+    let content = fs_access::read_to_string(path)?;
+    let updated_content = content.replace("package cupcake.helpers.", "package cupcake.system.");
+
+    // Write to system/ with updated package
+    fs_access::write(&dest, updated_content)
+        .with_context(|| format!("Failed to migrate {} to system/", path.display()))?;
+
+    // Remove the old file
+    fs_access::remove_file(path)
+        .with_context(|| format!("Failed to remove old helpers file {}", path.display()))?;
+
+    eprintln!("  Migrated: {} -> {}", path.display(), dest.display());
     Ok(())
 }
 
