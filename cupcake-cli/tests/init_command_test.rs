@@ -375,14 +375,14 @@ fn test_init_idempotent() -> Result<()> {
 /// Test that the created structure can be loaded by the engine
 #[tokio::test]
 #[serial(home_env)]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "isolates global-config discovery by pointing HOME at a temp directory; migrate to an injected home or a subprocess"
-)]
 async fn test_init_creates_valid_engine_structure() -> Result<()> {
     // Save original HOME and set to a temp directory to prevent global config discovery
     let original_home = std::env::var("HOME").ok();
     let home_temp_dir = TempDir::new()?;
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "points HOME at a temp directory to isolate global-config discovery; migrate to an injected home or a subprocess"
+    )]
     std::env::set_var("HOME", home_temp_dir.path());
 
     let result = async {
@@ -419,8 +419,16 @@ async fn test_init_creates_valid_engine_structure() -> Result<()> {
 
     // Restore original HOME (cleanup even if test fails)
     if let Some(home) = original_home {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "restores HOME after the isolated run; migrate to an injected home or a subprocess"
+        )]
         std::env::set_var("HOME", home);
     } else {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "restores HOME after the isolated run; migrate to an injected home or a subprocess"
+        )]
         std::env::remove_var("HOME");
     }
 
@@ -740,10 +748,6 @@ fn test_init_without_harness_requires_selection() -> Result<()> {
 /// Test that each harness can be loaded by the engine
 #[tokio::test]
 #[serial(home_env)]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "isolates global-config discovery by pointing HOME and USERPROFILE at a temp directory; migrate to an injected home or a subprocess"
-)]
 async fn test_all_harnesses_create_valid_engine_structures() -> Result<()> {
     // Save original HOME and USERPROFILE (Windows) and set to a temp directory
     // to prevent global config discovery. This ensures the test is isolated from
@@ -754,8 +758,16 @@ async fn test_all_harnesses_create_valid_engine_structures() -> Result<()> {
     let original_userprofile = std::env::var("USERPROFILE").ok();
 
     let home_temp_dir = TempDir::new()?;
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "points HOME at a temp directory to isolate global-config discovery; migrate to an injected home or a subprocess"
+    )]
     std::env::set_var("HOME", home_temp_dir.path());
     #[cfg(windows)]
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "points USERPROFILE at a temp directory to isolate global-config discovery; migrate to an injected home or a subprocess"
+    )]
     std::env::set_var("USERPROFILE", home_temp_dir.path());
 
     // Test each harness type
@@ -806,14 +818,30 @@ async fn test_all_harnesses_create_valid_engine_structures() -> Result<()> {
 
     // Restore original HOME and USERPROFILE (cleanup even if test fails)
     if let Some(home) = original_home {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "restores HOME after the isolated run; migrate to an injected home or a subprocess"
+        )]
         std::env::set_var("HOME", home);
     } else {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "restores HOME after the isolated run; migrate to an injected home or a subprocess"
+        )]
         std::env::remove_var("HOME");
     }
     #[cfg(windows)]
     if let Some(userprofile) = original_userprofile {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "restores USERPROFILE after the isolated run; migrate to an injected home or a subprocess"
+        )]
         std::env::set_var("USERPROFILE", userprofile);
     } else {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "restores USERPROFILE after the isolated run; migrate to an injected home or a subprocess"
+        )]
         std::env::remove_var("USERPROFILE");
     }
 
