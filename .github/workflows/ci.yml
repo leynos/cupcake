@@ -16,6 +16,7 @@ on:
       - "flake.nix"
       - "justfile"
       - "dylint.toml"
+      - "clippy.toml"
       - "scripts/check_build_standard.py"
       - "scripts/test_check_build_standard.py"
       # Policy/fixture changes that affect tests

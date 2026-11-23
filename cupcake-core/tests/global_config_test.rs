@@ -35,6 +35,10 @@ fn test_global_config_cli_override_discovery() -> Result<()> {
 fn test_global_config_graceful_absence() -> Result<()> {
     // Create a temp dir that doesn't have cupcake config
     let temp_dir = TempDir::new()?;
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "points HOME at an empty temp directory to prove discovery degrades gracefully; migrate to an injected home or a subprocess"
+    )]
     env::set_var("HOME", temp_dir.path().to_str().unwrap());
 
     // Discovery should return None gracefully when no config exists
