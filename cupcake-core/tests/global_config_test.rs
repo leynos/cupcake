@@ -4,8 +4,12 @@ use anyhow::Result;
 use cupcake_core::engine::global_config::GlobalPaths;
 use cupcake_core::fs_access;
 use serial_test::serial;
-use std::env; // Still needed for test_global_config_graceful_absence
+use std::env;
+use std::process::Command;
 use tempfile::TempDir;
+
+/// Names the variable that marks this process as the graceful-absence child.
+const ABSENCE_CHILD: &str = "CUPCAKE_TEST_GLOBAL_CONFIG_ABSENCE_CHILD";
 
 #[test]
 #[serial]
@@ -33,13 +37,28 @@ fn test_global_config_cli_override_discovery() -> Result<()> {
 #[test]
 #[serial]
 fn test_global_config_graceful_absence() -> Result<()> {
-    // Create a temp dir that doesn't have cupcake config
-    let temp_dir = TempDir::new()?;
-    #[expect(
-        clippy::disallowed_methods,
-        reason = "points HOME at an empty temp directory to prove discovery degrades gracefully; migrate to an injected home or a subprocess"
-    )]
-    env::set_var("HOME", temp_dir.path().to_str().unwrap());
+    // Run in a child whose HOME is a temp dir that doesn't have cupcake config.
+    if env::var_os(ABSENCE_CHILD).is_none() {
+        let temp_dir = TempDir::new()?;
+        let output = Command::new(env::current_exe()?)
+            .args([
+                "--exact",
+                "test_global_config_graceful_absence",
+                "--nocapture",
+            ])
+            .env(ABSENCE_CHILD, "1")
+            .env("HOME", temp_dir.path())
+            .env_remove("XDG_CONFIG_HOME")
+            .output()?;
+        anyhow::ensure!(
+            output.status.success(),
+            "test_global_config_graceful_absence failed in its child ({}):\n{}{}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return Ok(());
+    }
 
     // Discovery should return None gracefully when no config exists
     let discovered = GlobalPaths::discover()?;
