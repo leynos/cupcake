@@ -1987,3 +1987,66 @@ const OPENCODE_GLOBAL_CUPCAKE_EXEC_POLICY: &str =
 
 // Helper library (shared by all harnesses)
 const HELPERS_COMMANDS: &str = include_str!("../../fixtures/system/commands.rego");
+
+#[cfg(test)]
+mod inspect_output_tests {
+    //! Tests for the `inspect` table and list helpers.
+
+    use super::*;
+    use serde_json::json;
+
+    fn policy(package: &str, title: &str, is_builtin: bool) -> serde_json::Value {
+        json!({
+            "path": "policies/p.rego",
+            "package": package,
+            "is_builtin": is_builtin,
+            "routing": {
+                "required_events": ["PreToolUse", "PostToolUse"],
+                "required_tools": [],
+            },
+            "metadata": { "title": title, "authors": ["Ada", "Grace"] },
+        })
+    }
+
+    #[test]
+    fn table_row_shortens_the_package_and_types_the_policy() {
+        let row = policy_table_row(&policy("cupcake.policies.x", "Short", true));
+        assert_eq!(row.package, "policies.x");
+        assert_eq!(row.policy_type, "builtin");
+        assert_eq!(row.events, "PreToolUse, PostToolUse");
+        assert_eq!(row.tools, "");
+        assert_eq!(row.title, "Short");
+    }
+
+    #[test]
+    fn table_row_truncates_long_titles_by_character() {
+        let ascii = "a".repeat(41);
+        let row = policy_table_row(&policy("other.pkg", &ascii, false));
+        assert_eq!(row.title, format!("{}...", "a".repeat(37)));
+        assert_eq!(row.policy_type, "custom");
+        assert_eq!(row.package, "other.pkg");
+
+        // 41 two-byte characters: byte slicing at 37 would panic here.
+        let wide = "é".repeat(41);
+        let row = policy_table_row(&policy("p", &wide, false));
+        assert_eq!(row.title, format!("{}...", "é".repeat(37)));
+    }
+
+    #[test]
+    fn table_row_marks_missing_routing_with_a_dash() {
+        let row = policy_table_row(&json!({ "package": "p" }));
+        assert_eq!(row.events, "-");
+        assert_eq!(row.tools, "-");
+        assert_eq!(row.title, "-");
+    }
+
+    #[test]
+    fn string_list_reads_nested_string_arrays() {
+        let value = policy("p", "t", false);
+        assert_eq!(
+            string_list(&value, "metadata", "authors"),
+            Some(vec!["Ada".to_string(), "Grace".to_string()])
+        );
+        assert_eq!(string_list(&value, "metadata", "missing"), None);
+    }
+}

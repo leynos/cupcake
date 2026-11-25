@@ -65,3 +65,47 @@ pub(super) fn record_global_exit(
         phase.finalize();
     });
 }
+
+#[cfg(test)]
+mod tests {
+    //! Tests for the global-stop classification.
+
+    use super::*;
+
+    fn stop_labels(decision: &FinalDecision) -> Option<(&'static str, &'static str, String)> {
+        global_stop(decision).map(|s| (s.verb_upper, s.span_label, s.reason.to_string()))
+    }
+
+    #[test]
+    fn halt_deny_and_block_stop_global_evaluation() {
+        let halt = FinalDecision::Halt {
+            reason: "h".into(),
+            agent_messages: vec![],
+        };
+        let deny = FinalDecision::Deny {
+            reason: "d".into(),
+            agent_messages: vec![],
+        };
+        let block = FinalDecision::Block {
+            reason: "b".into(),
+            agent_messages: vec![],
+        };
+        assert_eq!(
+            stop_labels(&halt),
+            Some(("HALT", "GlobalHalt", "h".to_string()))
+        );
+        assert_eq!(
+            stop_labels(&deny),
+            Some(("DENY", "GlobalDeny", "d".to_string()))
+        );
+        assert_eq!(
+            stop_labels(&block),
+            Some(("BLOCK", "GlobalBlock", "b".to_string()))
+        );
+    }
+
+    #[test]
+    fn allow_does_not_stop_global_evaluation() {
+        assert!(global_stop(&FinalDecision::Allow { context: vec![] }).is_none());
+    }
+}
