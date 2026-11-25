@@ -4,6 +4,17 @@
 # exclusion is genuinely warranted, `excluded_paths` exempts one module and its
 # descendants, which is narrower than `excluded_crates` exempting a whole
 # compilation unit.
+# `macro_aware_cognitive_complexity` gates cognitive complexity while skipping
+# branching a macro generated. It is experimental, so the suite loads it only on
+# request; the tracker is https://github.com/leynos/whitaker/issues/504. The
+# limit is a ratchet: it sits at the highest score in the code today and only
+# ever moves down, to CodeScene's ceiling of 9.
+[whitaker]
+experimental = ["macro_aware_cognitive_complexity"]
+
+[macro_aware_cognitive_complexity]
+max_complexity = 28
+
 [no_std_fs_operations]
 excluded_paths = [
     # Ambient boundary for the TOB-4 symlink resolver. It canonicalizes and

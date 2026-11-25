@@ -117,6 +117,19 @@ repository's `1.91.0`, so the recipe and the job remove the development flags
 repository's `.cargo/config.toml` still applies to the build, which is why the
 job installs `mold` like the others.
 
+### Cognitive complexity
+
+Whitaker's experimental `macro_aware_cognitive_complexity` gates cognitive
+complexity. Unlike Clippy's `cognitive_complexity`, it does not count branching
+that a macro generated. `dylint.toml` opts in with the `experimental` key in its
+`[whitaker]` table. Its `max_complexity` is a ratchet: it holds the highest
+score in the workspace, so a new function cannot exceed it, and each refactor
+that lowers the highest score lowers the limit with it, down to CodeScene's
+ceiling of 9. Never raise it; fix a finding by extracting named helpers. A
+Whitaker suite installed before the lint existed does not register it and
+silently leaves the gate inactive, so rerun `whitaker-installer` to refresh the
+suite.
+
 ### Filesystem access
 
 Whitaker's `no_std_fs_operations` lint rejects `std::fs`. Library and binary
