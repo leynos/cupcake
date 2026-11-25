@@ -61,94 +61,14 @@ impl<'a> Executor<'a> {
     ) -> Result<Value> {
         let start = Instant::now();
 
-        // Collect all unique required signals from matched policies
-        let mut required_signals = std::collections::HashSet::new();
-        for policy in matched_policies {
-            for signal_name in &policy.routing.required_signals {
-                required_signals.insert(signal_name.clone());
-            }
-        }
-
-        // Auto-add signals for builtin policies
-        if let Some(rulebook) = self.rulebook {
-            for policy in matched_policies {
-                if policy
-                    .package_name
-                    .starts_with("cupcake.policies.builtins.")
-                {
-                    let builtin_name = policy
-                        .package_name
-                        .strip_prefix("cupcake.policies.builtins.")
-                        .unwrap_or("");
-
-                    // Special handling for post_edit_check
-                    if builtin_name == "post_edit_check" {
-                        if let Some(signal_name) = rulebook.builtins.get_post_edit_signal(input) {
-                            if rulebook.signals.contains_key(&signal_name) {
-                                debug!(
-                                    "Auto-adding signal '{}' for post_edit_check builtin",
-                                    signal_name
-                                );
-                                required_signals.insert(signal_name);
-                            }
-                        }
-                    } else {
-                        // For other builtins, add all matching signals
-                        let signal_prefix = format!("__builtin_{builtin_name}_");
-                        for signal_name in rulebook.signals.keys() {
-                            if signal_name.starts_with(&signal_prefix) {
-                                debug!(
-                                    "Auto-adding signal '{}' for builtin '{}'",
-                                    signal_name, builtin_name
-                                );
-                                required_signals.insert(signal_name.clone());
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        let required_signals = self.collect_required_signals(input, matched_policies);
 
         // Always inject builtin config, even when no signals are required
         let mut enriched_input = input.clone();
-        if let Some(input_obj) = enriched_input.as_object_mut() {
-            let mut builtin_config = serde_json::Map::new();
-
-            // First inject project configs (baseline)
-            if let Some(project_rulebook) = self.rulebook {
-                debug!("Injecting builtin configs from project rulebook");
-                builtin_config.extend(project_rulebook.builtins.to_json_configs());
-            }
-
-            // Then inject global configs (override project)
-            if let Some(global_rulebook) = self.global_rulebook {
-                debug!("Injecting builtin configs from global rulebook (overrides project)");
-                builtin_config.extend(global_rulebook.builtins.to_json_configs());
-            }
-
-            if !builtin_config.is_empty() {
-                debug!(
-                    "Injected {} builtin configurations total",
-                    builtin_config.len()
-                );
-                input_obj.insert(
-                    "builtin_config".to_string(),
-                    serde_json::Value::Object(builtin_config),
-                );
-            }
-        }
+        self.inject_builtin_config(&mut enriched_input);
 
         // Check if watchdog should run
-        let is_pre_action_event = input
-            .get("hook_event_name")
-            .and_then(|v| v.as_str())
-            .map(|s| {
-                matches!(
-                    s,
-                    "PreToolUse" | "beforeShellExecution" | "beforeMCPExecution"
-                )
-            })
-            .unwrap_or(false);
+        let is_pre_action_event = is_pre_action_event(input);
         let watchdog_should_run = self.watchdog.is_some() && is_pre_action_event;
 
         if required_signals.is_empty() && !watchdog_should_run {
@@ -191,39 +111,12 @@ impl<'a> Executor<'a> {
             let mut signals_obj = serde_json::to_value(signal_data)?;
 
             // Execute Watchdog if enabled
-            if let Some(watchdog) = self.watchdog {
-                if is_pre_action_event {
-                    debug!(
-                        "Executing Watchdog evaluation for {:?} event",
-                        input.get("hook_event_name")
-                    );
-                    let watchdog_start = Instant::now();
-                    let watchdog_input = Watchdog::input_from_event(input);
-                    let watchdog_output = watchdog.evaluate(watchdog_input).await;
-                    let watchdog_duration = watchdog_start.elapsed();
-                    debug!(
-                        "Watchdog result: allow={}, confidence={}",
-                        watchdog_output.allow, watchdog_output.confidence
-                    );
-
-                    // Capture watchdog in telemetry
-                    if let Some(ref mut telemetry) = signal_telemetry {
-                        telemetry.signals.push(SignalExecution {
-                            name: "watchdog".to_string(),
-                            command: format!("LLM evaluation via {}", watchdog.backend_name()),
-                            result: serde_json::to_value(&watchdog_output).unwrap_or_default(),
-                            duration_ms: Some(watchdog_duration.as_millis() as u64),
-                            exit_code: None,
-                        });
-                    }
-
-                    if let Some(signals_map) = signals_obj.as_object_mut() {
-                        signals_map.insert(
-                            "watchdog".to_string(),
-                            serde_json::to_value(&watchdog_output)?,
-                        );
-                        signal_count += 1;
-                    }
+            if let Some(watchdog) = self.watchdog.filter(|_| is_pre_action_event) {
+                let watchdog_value =
+                    run_watchdog(watchdog, input, signal_telemetry.as_deref_mut()).await?;
+                if let Some(signals_map) = signals_obj.as_object_mut() {
+                    signals_map.insert("watchdog".to_string(), watchdog_value);
+                    signal_count += 1;
                 }
             }
 
@@ -246,6 +139,168 @@ impl<'a> Executor<'a> {
 
         Ok(enriched_input)
     }
+
+    /// Collect the signals the matched policies require, including the
+    /// signals that builtin policies add automatically.
+    fn collect_required_signals(
+        &self,
+        input: &Value,
+        matched_policies: &[PolicyUnit],
+    ) -> std::collections::HashSet<String> {
+        let mut required_signals = std::collections::HashSet::new();
+        for policy in matched_policies {
+            for signal_name in &policy.routing.required_signals {
+                required_signals.insert(signal_name.clone());
+            }
+        }
+
+        if let Some(rulebook) = self.rulebook {
+            for policy in matched_policies {
+                add_builtin_signals(rulebook, policy, input, &mut required_signals);
+            }
+        }
+        required_signals
+    }
+
+    /// Inject the builtin configuration into `enriched_input`: project
+    /// configs first as the baseline, then global configs, which override.
+    fn inject_builtin_config(&self, enriched_input: &mut Value) {
+        let Some(input_obj) = enriched_input.as_object_mut() else {
+            return;
+        };
+        let mut builtin_config = serde_json::Map::new();
+
+        if let Some(project_rulebook) = self.rulebook {
+            debug!("Injecting builtin configs from project rulebook");
+            builtin_config.extend(project_rulebook.builtins.to_json_configs());
+        }
+
+        if let Some(global_rulebook) = self.global_rulebook {
+            debug!("Injecting builtin configs from global rulebook (overrides project)");
+            builtin_config.extend(global_rulebook.builtins.to_json_configs());
+        }
+
+        if !builtin_config.is_empty() {
+            debug!(
+                "Injected {} builtin configurations total",
+                builtin_config.len()
+            );
+            input_obj.insert(
+                "builtin_config".to_string(),
+                serde_json::Value::Object(builtin_config),
+            );
+        }
+    }
+}
+
+/// Whether `input` is an event that runs before the action it describes.
+fn is_pre_action_event(input: &Value) -> bool {
+    input
+        .get("hook_event_name")
+        .and_then(|v| v.as_str())
+        .map(|s| {
+            matches!(
+                s,
+                "PreToolUse" | "beforeShellExecution" | "beforeMCPExecution"
+            )
+        })
+        .unwrap_or(false)
+}
+
+/// Add the signals a builtin policy needs to `required_signals`.
+///
+/// Policies outside the `cupcake.policies.builtins.` package add nothing.
+fn add_builtin_signals(
+    rulebook: &Rulebook,
+    policy: &PolicyUnit,
+    input: &Value,
+    required_signals: &mut std::collections::HashSet<String>,
+) {
+    let Some(builtin_name) = policy
+        .package_name
+        .strip_prefix("cupcake.policies.builtins.")
+    else {
+        return;
+    };
+
+    // Special handling for post_edit_check
+    if builtin_name == "post_edit_check" {
+        add_post_edit_signal(rulebook, input, required_signals);
+    } else {
+        add_prefixed_signals(rulebook, builtin_name, required_signals);
+    }
+}
+
+/// Add the extension-specific signal of the `post_edit_check` builtin, when
+/// the edited file has one defined.
+fn add_post_edit_signal(
+    rulebook: &Rulebook,
+    input: &Value,
+    required_signals: &mut std::collections::HashSet<String>,
+) {
+    let Some(signal_name) = rulebook.builtins.get_post_edit_signal(input) else {
+        return;
+    };
+    if rulebook.signals.contains_key(&signal_name) {
+        debug!(
+            "Auto-adding signal '{}' for post_edit_check builtin",
+            signal_name
+        );
+        required_signals.insert(signal_name);
+    }
+}
+
+/// Add every signal named `__builtin_<builtin_name>_*` (all matching signals
+/// for the other builtins).
+fn add_prefixed_signals(
+    rulebook: &Rulebook,
+    builtin_name: &str,
+    required_signals: &mut std::collections::HashSet<String>,
+) {
+    let signal_prefix = format!("__builtin_{builtin_name}_");
+    for signal_name in rulebook.signals.keys() {
+        if signal_name.starts_with(&signal_prefix) {
+            debug!(
+                "Auto-adding signal '{}' for builtin '{}'",
+                signal_name, builtin_name
+            );
+            required_signals.insert(signal_name.clone());
+        }
+    }
+}
+
+/// Run the watchdog on a pre-action event, record it in the signal telemetry
+/// and return its output as JSON for the `watchdog` signal.
+async fn run_watchdog(
+    watchdog: &Watchdog,
+    input: &Value,
+    signal_telemetry: Option<&mut SignalTelemetry>,
+) -> Result<Value> {
+    debug!(
+        "Executing Watchdog evaluation for {:?} event",
+        input.get("hook_event_name")
+    );
+    let watchdog_start = Instant::now();
+    let watchdog_input = Watchdog::input_from_event(input);
+    let watchdog_output = watchdog.evaluate(watchdog_input).await;
+    let watchdog_duration = watchdog_start.elapsed();
+    debug!(
+        "Watchdog result: allow={}, confidence={}",
+        watchdog_output.allow, watchdog_output.confidence
+    );
+
+    // Capture watchdog in telemetry
+    if let Some(telemetry) = signal_telemetry {
+        telemetry.signals.push(SignalExecution {
+            name: "watchdog".to_string(),
+            command: format!("LLM evaluation via {}", watchdog.backend_name()),
+            result: serde_json::to_value(&watchdog_output).unwrap_or_default(),
+            duration_ms: Some(watchdog_duration.as_millis() as u64),
+            exit_code: None,
+        });
+    }
+
+    Ok(serde_json::to_value(&watchdog_output)?)
 }
 
 mod signals;
