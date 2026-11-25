@@ -83,6 +83,15 @@ impl Engine {
 
         // No entrypoint mapping needed - Hybrid Model uses single aggregation entrypoint
 
+        self.compile_project_wasm().await?;
+        self.dump_routing_diagnostics_if_requested();
+
+        info!("Engine initialization complete");
+        Ok(())
+    }
+
+    /// Compile the unified project WASM module and start its runtime (steps 4 and 5).
+    async fn compile_project_wasm(&mut self) -> Result<()> {
         // Step 4: Compile unified WASM module with OPA path from CLI
         // Pass cupcake_dir for helpers resolution at root level
         let wasm_bytes = compiler::compile_policies_with_namespace(
@@ -105,18 +114,20 @@ impl Engine {
             self.config.wasm_max_memory,
         )?);
         info!("WASM runtime initialized");
-
-        // Step 6: Dump routing diagnostics if debug mode enabled via CLI flag
-        // This happens after ALL initialization (including global) is complete
-        if self.config.debug_routing {
-            if let Err(e) = self.dump_routing_diagnostics() {
-                // Don't fail initialization, just warn
-                warn!("Failed to dump routing diagnostics: {}", e);
-            }
-        }
-
-        info!("Engine initialization complete");
         Ok(())
+    }
+
+    /// Step 6: dump routing diagnostics when the CLI debug flag is set.
+    ///
+    /// This runs after ALL initialization (including global) is complete. A failure only warns.
+    fn dump_routing_diagnostics_if_requested(&self) {
+        if !self.config.debug_routing {
+            return;
+        }
+        if let Err(e) = self.dump_routing_diagnostics() {
+            // Don't fail initialization, just warn
+            warn!("Failed to dump routing diagnostics: {}", e);
+        }
     }
 
     /// Initialize global configuration (policies, rulebook, WASM)
@@ -127,25 +138,15 @@ impl Engine {
         let global_policies_path = self
             .paths
             .global_policies
-            .as_ref()
+            .clone()
             .context("Global policies path not set")?;
         let global_rulebook_path = self
             .paths
             .global_rulebook
-            .as_ref()
+            .clone()
             .context("Global rulebook path not set")?;
 
-        // Load global rulebook
-        if global_rulebook_path.exists() {
-            self.global_rulebook = Some(
-                rulebook::Rulebook::load_with_conventions(
-                    global_rulebook_path,
-                    self.paths.global_signals.as_ref().unwrap(),
-                )
-                .await?,
-            );
-            info!("Global rulebook loaded");
-        }
+        self.load_global_rulebook(&global_rulebook_path).await?;
 
         // Get global enabled builtins
         let global_enabled_builtins = self
@@ -175,88 +176,163 @@ impl Engine {
                 harness_subdir
             );
 
-            // Parse global policies
-            for path in global_policy_files {
-                match self.parse_policy(&path).await {
-                    Ok(mut unit) => {
-                        // Transform package name to global namespace
-                        if !unit.package_name.starts_with("cupcake.global.") {
-                            // Replace "cupcake.policies" with "cupcake.global.policies"
-                            unit.package_name = unit
-                                .package_name
-                                .replace("cupcake.policies", "cupcake.global.policies")
-                                .replace("cupcake.system", "cupcake.global.system");
-                        }
-                        info!(
-                            "Successfully parsed global policy: {} from {:?}",
-                            unit.package_name, path
-                        );
-                        self.global_policies.push(unit);
-                    }
-                    Err(e) => {
-                        error!("Failed to parse global policy at {:?}: {}", path, e);
-                    }
-                }
-            }
-
-            if !self.global_policies.is_empty() {
-                // Check if we have non-system policies (OPA panics with only system policies)
-                info!(
-                    "Global policies found: {:?}",
-                    self.global_policies
-                        .iter()
-                        .map(|p| &p.package_name)
-                        .collect::<Vec<_>>()
-                );
-                let non_system_count = self
-                    .global_policies
-                    .iter()
-                    .filter(|p| !p.package_name.ends_with(".system"))
-                    .count();
-
-                if non_system_count > 0 {
-                    // Build global routing map
-                    self.build_global_routing_map();
-                    info!(
-                        "Built global routing map with {} entries",
-                        self.global_routing_map.len()
-                    );
-
-                    info!(
-                        "Found {} global policies ({} non-system) - compiling global WASM module",
-                        self.global_policies.len(),
-                        non_system_count
-                    );
-
-                    // Compile global policies to WASM with OPA path from CLI
-                    // Pass global_root for helpers resolution at root level
-                    let global_wasm_bytes = compiler::compile_policies_with_namespace(
-                        &self.global_policies,
-                        "cupcake.global.system",
-                        self.config.opa_path.clone(),
-                        self.paths.global_root.as_deref(),
-                    )
-                    .await?;
-                    info!(
-                        "Successfully compiled global WASM module ({} bytes)",
-                        global_wasm_bytes.len()
-                    );
-                    self.global_wasm_module = Some(global_wasm_bytes.clone());
-
-                    // Initialize global WASM runtime with global namespace and memory config
-                    self.global_wasm_runtime = Some(wasm_runtime::WasmRuntime::new_with_config(
-                        &global_wasm_bytes,
-                        "cupcake.global.system",
-                        self.config.wasm_max_memory,
-                    )?);
-                    info!("Global WASM runtime initialized with namespace: cupcake.global.system");
-                } else {
-                    info!("Only system policies found in global config - skipping global WASM compilation");
-                }
-            }
+            self.parse_global_policies(global_policy_files).await;
+            self.compile_global_wasm_if_needed().await?;
         }
 
         info!("Global configuration initialization complete");
         Ok(())
+    }
+
+    /// Load the global rulebook when its file exists.
+    async fn load_global_rulebook(&mut self, global_rulebook_path: &Path) -> Result<()> {
+        if !global_rulebook_path.exists() {
+            return Ok(());
+        }
+        self.global_rulebook = Some(
+            rulebook::Rulebook::load_with_conventions(
+                global_rulebook_path,
+                self.paths
+                    .global_signals
+                    .as_ref()
+                    .context("Global signals path not set")?,
+            )
+            .await?,
+        );
+        info!("Global rulebook loaded");
+        Ok(())
+    }
+
+    /// Parse each global policy file into `global_policies`, logging and skipping failures.
+    async fn parse_global_policies(&mut self, global_policy_files: Vec<std::path::PathBuf>) {
+        for path in global_policy_files {
+            match self.parse_policy(&path).await {
+                Ok(mut unit) => {
+                    move_to_global_namespace(&mut unit);
+                    info!(
+                        "Successfully parsed global policy: {} from {:?}",
+                        unit.package_name, path
+                    );
+                    self.global_policies.push(unit);
+                }
+                Err(e) => {
+                    error!("Failed to parse global policy at {:?}: {}", path, e);
+                }
+            }
+        }
+    }
+
+    /// Build the global routing map and compile the global WASM module when user policies exist.
+    async fn compile_global_wasm_if_needed(&mut self) -> Result<()> {
+        if self.global_policies.is_empty() {
+            return Ok(());
+        }
+
+        // Check if we have non-system policies (OPA panics with only system policies)
+        info!(
+            "Global policies found: {:?}",
+            self.global_policies
+                .iter()
+                .map(|p| &p.package_name)
+                .collect::<Vec<_>>()
+        );
+        let non_system_count = self
+            .global_policies
+            .iter()
+            .filter(|p| !p.package_name.ends_with(".system"))
+            .count();
+
+        if non_system_count == 0 {
+            info!("Only system policies found in global config - skipping global WASM compilation");
+            return Ok(());
+        }
+
+        // Build global routing map
+        self.build_global_routing_map();
+        info!(
+            "Built global routing map with {} entries",
+            self.global_routing_map.len()
+        );
+
+        info!(
+            "Found {} global policies ({} non-system) - compiling global WASM module",
+            self.global_policies.len(),
+            non_system_count
+        );
+
+        // Compile global policies to WASM with OPA path from CLI
+        // Pass global_root for helpers resolution at root level
+        let global_wasm_bytes = compiler::compile_policies_with_namespace(
+            &self.global_policies,
+            "cupcake.global.system",
+            self.config.opa_path.clone(),
+            self.paths.global_root.as_deref(),
+        )
+        .await?;
+        info!(
+            "Successfully compiled global WASM module ({} bytes)",
+            global_wasm_bytes.len()
+        );
+        self.global_wasm_module = Some(global_wasm_bytes.clone());
+
+        // Initialize global WASM runtime with global namespace and memory config
+        self.global_wasm_runtime = Some(wasm_runtime::WasmRuntime::new_with_config(
+            &global_wasm_bytes,
+            "cupcake.global.system",
+            self.config.wasm_max_memory,
+        )?);
+        info!("Global WASM runtime initialized with namespace: cupcake.global.system");
+        Ok(())
+    }
+}
+
+/// Rewrite a policy's package name into the global namespace unless it is already there.
+fn move_to_global_namespace(unit: &mut PolicyUnit) {
+    if unit.package_name.starts_with("cupcake.global.") {
+        return;
+    }
+    // Replace "cupcake.policies" with "cupcake.global.policies"
+    unit.package_name = unit
+        .package_name
+        .replace("cupcake.policies", "cupcake.global.policies")
+        .replace("cupcake.system", "cupcake.global.system");
+}
+
+#[cfg(test)]
+mod tests {
+    //! Tests for the global-namespace rewrite used when parsing global policies.
+
+    use super::*;
+
+    fn unit(package_name: &str) -> PolicyUnit {
+        PolicyUnit {
+            path: std::path::PathBuf::from("policy.rego"),
+            package_name: package_name.to_string(),
+            routing: Default::default(),
+            metadata: None,
+        }
+    }
+
+    #[test]
+    fn move_to_global_namespace_rewrites_policy_and_system_packages() {
+        for (before, after) in [
+            ("cupcake.policies.custom", "cupcake.global.policies.custom"),
+            (
+                "cupcake.policies.builtins.git_guard",
+                "cupcake.global.policies.builtins.git_guard",
+            ),
+            ("cupcake.system", "cupcake.global.system"),
+        ] {
+            let mut policy = unit(before);
+            move_to_global_namespace(&mut policy);
+            assert_eq!(policy.package_name, after);
+        }
+    }
+
+    #[test]
+    fn move_to_global_namespace_leaves_global_packages_unchanged() {
+        let mut policy = unit("cupcake.global.policies.custom");
+        move_to_global_namespace(&mut policy);
+        assert_eq!(policy.package_name, "cupcake.global.policies.custom");
     }
 }
