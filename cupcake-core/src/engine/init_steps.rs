@@ -102,9 +102,44 @@ impl Engine {
     /// System policies (`cupcake.system.*`, `cupcake.global.system.*`) are
     /// entrypoints and helpers that aggregate decisions; they hold no rules.
     pub(super) fn has_user_policies(&self) -> bool {
-        self.policies.iter().any(|p| {
-            !p.package_name.starts_with("cupcake.system")
-                && !p.package_name.starts_with("cupcake.global.system")
-        })
+        any_user_policy(&self.policies)
+    }
+}
+
+/// Whether any of `policies` is a user rule rather than a system policy.
+fn any_user_policy(policies: &[PolicyUnit]) -> bool {
+    policies.iter().any(|p| {
+        !p.package_name.starts_with("cupcake.system")
+            && !p.package_name.starts_with("cupcake.global.system")
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    //! Tests for the initialisation helpers.
+
+    use super::*;
+
+    fn unit(package_name: &str) -> PolicyUnit {
+        PolicyUnit {
+            path: PathBuf::from("policies/p.rego"),
+            package_name: package_name.to_string(),
+            routing: Default::default(),
+            metadata: None,
+        }
+    }
+
+    #[test]
+    fn only_system_policies_are_not_user_policies() {
+        let policies = [unit("cupcake.system"), unit("cupcake.global.system")];
+        assert!(!any_user_policy(&policies));
+        assert!(!any_user_policy(&[]));
+    }
+
+    #[test]
+    fn one_user_policy_among_system_policies_counts() {
+        let policies = [unit("cupcake.system"), unit("cupcake.policies.rule")];
+        assert!(any_user_policy(&policies));
+        assert!(any_user_policy(&[unit("cupcake.global.policies.rule")]));
     }
 }
