@@ -171,6 +171,34 @@ impl SynthesisEngine {
         high_decisions.is_empty() && medium_decisions.is_empty()
     }
 
+    /// Describe one severity group: its sole reason, or `heading: reason; reason`.
+    ///
+    /// Returns `None` for an empty group. `with_rule_id` prefixes each reason with `[rule_id]`.
+    fn describe_group(
+        group: &[&DecisionObject],
+        heading: &str,
+        with_rule_id: bool,
+    ) -> Option<String> {
+        match group {
+            [] => None,
+            [only] => Some(only.reason.clone()),
+            _ => {
+                let joined = group
+                    .iter()
+                    .map(|d| {
+                        if with_rule_id {
+                            format!("[{}] {}", d.rule_id, d.reason)
+                        } else {
+                            d.reason.clone()
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                Some(format!("{heading}: {joined}"))
+            }
+        }
+    }
+
     /// Aggregate multiple decision reasons into a single, clear message
     ///
     /// This handles the case where multiple policies of the same priority
@@ -200,52 +228,28 @@ impl SynthesisEngine {
         let mut parts = Vec::new();
 
         // Start with highest severity
-        if !high_decisions.is_empty() {
-            if high_decisions.len() == 1 {
-                parts.push(high_decisions[0].reason.clone());
-            } else {
-                parts.push(format!(
-                    "Multiple high-severity policy violations detected: {}",
-                    high_decisions
-                        .iter()
-                        .map(|d| format!("[{}] {}", d.rule_id, d.reason))
-                        .collect::<Vec<_>>()
-                        .join("; ")
-                ));
-            }
-        }
+        parts.extend(Self::describe_group(
+            &high_decisions,
+            "Multiple high-severity policy violations detected",
+            true,
+        ));
 
         // Add medium severity if no high severity
-        if high_decisions.is_empty() && !medium_decisions.is_empty() {
-            if medium_decisions.len() == 1 {
-                parts.push(medium_decisions[0].reason.clone());
-            } else {
-                parts.push(format!(
-                    "Multiple policy violations detected: {}",
-                    medium_decisions
-                        .iter()
-                        .map(|d| format!("[{}] {}", d.rule_id, d.reason))
-                        .collect::<Vec<_>>()
-                        .join("; ")
-                ));
-            }
+        if high_decisions.is_empty() {
+            parts.extend(Self::describe_group(
+                &medium_decisions,
+                "Multiple policy violations detected",
+                true,
+            ));
         }
 
         // Add low severity only if no higher priorities
-        if Self::no_higher_severity(&high_decisions, &medium_decisions) && !low_decisions.is_empty()
-        {
-            if low_decisions.len() == 1 {
-                parts.push(low_decisions[0].reason.clone());
-            } else {
-                parts.push(format!(
-                    "Policy guidelines: {}",
-                    low_decisions
-                        .iter()
-                        .map(|d| d.reason.as_str())
-                        .collect::<Vec<_>>()
-                        .join("; ")
-                ));
-            }
+        if Self::no_higher_severity(&high_decisions, &medium_decisions) {
+            parts.extend(Self::describe_group(
+                &low_decisions,
+                "Policy guidelines",
+                false,
+            ));
         }
 
         if parts.is_empty() {

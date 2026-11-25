@@ -158,63 +158,61 @@ fn get_claude_path() -> Result<String, String> {
     Ok(claude_path)
 }
 
-/// Helper to verify routing map contains expected entries
-async fn verify_routing(project_path: &std::path::Path, expected_key: &str, expected_policy: &str) {
-    // Create .claude directory
-    let claude_dir = project_path.join(".claude");
-    fs_access::create_dir_all(&claude_dir).unwrap();
-
-    // Determine the command to use - prefer built binary in CI
-    let command = if std::env::var("CI").is_ok() {
-        // In CI, use the built binary directly
-        let target_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .join("target")
-            .join("release")
-            .join(if cfg!(windows) {
-                "cupcake.exe"
-            } else {
-                "cupcake"
-            });
-
-        if target_dir.exists() {
-            eprintln!("[DEBUG] Using built binary in CI: {target_dir:?}");
-            format!(
-                "{} eval --harness claude --debug-routing",
-                target_dir.display()
-            )
+/// Path of a built `cupcake` binary under the workspace `target/<profile>` directory.
+fn built_binary(profile: &str) -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("target")
+        .join(profile)
+        .join(if cfg!(windows) {
+            "cupcake.exe"
         } else {
-            // Fallback to debug build
-            let debug_target = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .parent()
-                .unwrap()
-                .join("target")
-                .join("debug")
-                .join(if cfg!(windows) {
-                    "cupcake.exe"
-                } else {
-                    "cupcake"
-                });
+            "cupcake"
+        })
+}
 
-            eprintln!("[DEBUG] Release binary not found, trying debug: {debug_target:?}");
-            format!(
-                "{} eval --harness claude --debug-routing",
-                debug_target.display()
-            )
-        }
-    } else {
+/// The hook command to use: a built binary in CI (release, then debug), `cargo run` locally.
+fn hook_command() -> String {
+    if std::env::var("CI").is_err() {
         // Local development - use cargo run
         let cargo_manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .unwrap()
             .join("Cargo.toml");
         eprintln!("[DEBUG] Using cargo run for local development");
-        format!(
+        return format!(
             "cargo run --manifest-path {} -- eval --harness claude --debug-routing",
             cargo_manifest.display()
-        )
-    };
+        );
+    }
+
+    // In CI, use the built binary directly
+    let release = built_binary("release");
+    if release.exists() {
+        eprintln!("[DEBUG] Using built binary in CI: {release:?}");
+        return format!(
+            "{} eval --harness claude --debug-routing",
+            release.display()
+        );
+    }
+
+    // Fallback to debug build
+    let debug_target = built_binary("debug");
+    eprintln!("[DEBUG] Release binary not found, trying debug: {debug_target:?}");
+    format!(
+        "{} eval --harness claude --debug-routing",
+        debug_target.display()
+    )
+}
+
+/// Helper to verify routing map contains expected entries
+async fn verify_routing(project_path: &std::path::Path, expected_key: &str, expected_policy: &str) {
+    // Create .claude directory
+    let claude_dir = project_path.join(".claude");
+    fs_access::create_dir_all(&claude_dir).unwrap();
+
+    let command = hook_command();
 
     eprintln!("[DEBUG] Hook command: {command}");
 

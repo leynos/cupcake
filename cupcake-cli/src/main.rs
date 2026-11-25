@@ -370,6 +370,38 @@ fn main() -> Result<()> {
     runtime.block_on(run())
 }
 
+/// When `debug` is set, install a debug-level tracing subscriber that logs to stderr, not stdout.
+fn enable_debug_tracing(debug: bool) {
+    if !debug {
+        return;
+    }
+    tracing::subscriber::set_global_default(
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::new("debug"))
+            .with_target(false)
+            .with_writer(std::io::stderr) // Critical: logs to stderr, not stdout
+            .finish(),
+    )
+    .ok();
+}
+
+/// Build the engine config from the harness and the engine-related CLI flags.
+fn engine_config_from_flags(
+    harness: HarnessType,
+    wasm_max_memory: &MemorySize,
+    opa_path: &Option<PathBuf>,
+    global_config: &Option<PathBuf>,
+    debug_routing: bool,
+) -> engine::EngineConfig {
+    engine::EngineConfig {
+        harness: harness.into(), // Convert CLI HarnessType to core HarnessType
+        wasm_max_memory: Some(wasm_max_memory.bytes),
+        opa_path: opa_path.clone(),
+        global_config: global_config.clone(),
+        debug_routing,
+    }
+}
+
 async fn run() -> Result<()> {
     let cli = Cli::parse();
 
@@ -383,25 +415,15 @@ async fn run() -> Result<()> {
             debug,
             strict,
         } => {
-            if debug {
-                tracing::subscriber::set_global_default(
-                    tracing_subscriber::fmt()
-                        .with_env_filter(EnvFilter::new("debug"))
-                        .with_target(false)
-                        .with_writer(std::io::stderr) // Critical: logs to stderr, not stdout
-                        .finish(),
-                )
-                .ok();
-            }
+            enable_debug_tracing(debug);
 
-            // Build engine config from CLI flags
-            let engine_config = engine::EngineConfig {
-                harness: harness.into(), // Convert CLI HarnessType to core HarnessType
-                wasm_max_memory: Some(cli.wasm_max_memory.bytes),
-                opa_path: cli.opa_path.clone(),
-                global_config: cli.global_config.clone(),
-                debug_routing: cli.debug_routing,
-            };
+            let engine_config = engine_config_from_flags(
+                harness,
+                &cli.wasm_max_memory,
+                &cli.opa_path,
+                &cli.global_config,
+                cli.debug_routing,
+            );
 
             eval_command(
                 policy_dir,

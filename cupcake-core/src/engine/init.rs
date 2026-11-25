@@ -23,33 +23,8 @@ impl Engine {
         // Step 0C: Initialize Watchdog if enabled in rulebook
         self.initialize_watchdog();
 
-        // Get list of enabled builtins for filtering
-        let enabled_builtins = self
-            .rulebook
-            .as_ref()
-            .map(|g| g.builtins.enabled_builtins())
-            .unwrap_or_default();
-
-        if !enabled_builtins.is_empty() {
-            info!("Enabled builtins: {:?}", enabled_builtins);
-        }
-
-        // Determine harness-specific policies subdirectory
-        let harness_subdir = self.harness_subdir();
-        let harness_policies_dir = self.paths.policies.join(harness_subdir);
-        info!(
-            "Scanning harness-specific policies for: {:?} at {:?}",
-            self.config.harness, harness_policies_dir
-        );
-
         // Step 1: Scan for .rego files in harness-specific directory with builtin filtering
-        let policy_files =
-            scanner::scan_policies_with_filter(&harness_policies_dir, &enabled_builtins).await?;
-        info!(
-            "Found {} policy files in {} harness directory",
-            policy_files.len(),
-            harness_subdir
-        );
+        let policy_files = self.scan_project_policy_files().await?;
 
         // Step 1b: Scan system directory at cupcake root for shared system entrypoint
         let system_files = self.scan_system_policy_files().await;
@@ -88,6 +63,37 @@ impl Engine {
 
         info!("Engine initialization complete");
         Ok(())
+    }
+
+    /// Scan the harness-specific policies directory, filtering builtins by the project rulebook.
+    async fn scan_project_policy_files(&self) -> Result<Vec<std::path::PathBuf>> {
+        // Get list of enabled builtins for filtering
+        let enabled_builtins = self
+            .rulebook
+            .as_ref()
+            .map(|g| g.builtins.enabled_builtins())
+            .unwrap_or_default();
+
+        if !enabled_builtins.is_empty() {
+            info!("Enabled builtins: {:?}", enabled_builtins);
+        }
+
+        // Determine harness-specific policies subdirectory
+        let harness_subdir = self.harness_subdir();
+        let harness_policies_dir = self.paths.policies.join(harness_subdir);
+        info!(
+            "Scanning harness-specific policies for: {:?} at {:?}",
+            self.config.harness, harness_policies_dir
+        );
+
+        let policy_files =
+            scanner::scan_policies_with_filter(&harness_policies_dir, &enabled_builtins).await?;
+        info!(
+            "Found {} policy files in {} harness directory",
+            policy_files.len(),
+            harness_subdir
+        );
+        Ok(policy_files)
     }
 
     /// Compile the unified project WASM module and start its runtime (steps 4 and 5).

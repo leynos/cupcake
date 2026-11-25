@@ -153,23 +153,12 @@ impl Engine {
                 .await?;
 
             // Record global evaluation in telemetry
-            if let Some(ref mut ctx) = telemetry {
-                let phase = ctx.start_phase("global");
-                phase.evaluation_mut().record_routing(
-                    true,
-                    &self.global_routing_map.keys().cloned().collect::<Vec<_>>(),
-                );
-                // Record signal executions from global evaluation
-                for signal in global_signal_executions {
-                    phase.record_signal(signal);
-                }
-                phase
-                    .evaluation_mut()
-                    .record_wasm_result(&global_decision_set);
-                phase
-                    .evaluation_mut()
-                    .record_final_decision(&global_decision);
-            }
+            self.record_global_phase(
+                &mut telemetry,
+                &global_decision,
+                &global_decision_set,
+                global_signal_executions,
+            );
 
             // Early termination on global blocking decisions
             if let Some(stop) = global_stop(&global_decision) {
@@ -218,15 +207,7 @@ impl Engine {
         if matched_policies.is_empty() {
             info!("No policies matched for this event - allowing");
             // Record early exit in telemetry
-            with_current_phase(&mut telemetry, |phase| {
-                phase
-                    .evaluation_mut()
-                    .record_exit("No policies matched - implicit allow");
-                phase
-                    .evaluation_mut()
-                    .record_final_decision(&decision::FinalDecision::Allow { context: vec![] });
-                phase.finalize();
-            });
+            record_no_policies_matched(&mut telemetry);
             current_span.record("matched_policy_count", 0);
             current_span.record("final_decision", "Allow");
             current_span.record("duration_ms", eval_start.elapsed().as_millis());
@@ -238,18 +219,13 @@ impl Engine {
 
         // Step 2: Gather signals using the Executor (created earlier for global evaluation)
         // Gather signals - collect telemetry if enabled
-        let (enriched_input, signal_executions) = if telemetry.is_some() {
-            let mut signal_telemetry = SignalTelemetry::new();
-            let result = exec
-                .gather_signals(&safe_input, &matched_policies, Some(&mut signal_telemetry))
-                .await?;
-            (result, signal_telemetry.signals)
-        } else {
-            let result = exec
-                .gather_signals(&safe_input, &matched_policies, None)
-                .await?;
-            (result, Vec::new())
-        };
+        let (enriched_input, signal_executions) = gather_signals_for_evaluation(
+            &exec,
+            &safe_input,
+            &matched_policies,
+            telemetry.is_some(),
+        )
+        .await?;
 
         // Record signal executions in telemetry
         with_current_phase(&mut telemetry, |phase| {
@@ -293,5 +269,63 @@ impl Engine {
         );
 
         Ok(final_decision)
+    }
+
+    /// Record the global evaluation phase: routing, signal executions, WASM result and decision.
+    fn record_global_phase(
+        &self,
+        telemetry: &mut Option<&mut TelemetryContext>,
+        decision: &decision::FinalDecision,
+        decision_set: &decision::DecisionSet,
+        signal_executions: Vec<crate::telemetry::span::SignalExecution>,
+    ) {
+        let Some(ctx) = telemetry else {
+            return;
+        };
+        let phase = ctx.start_phase("global");
+        phase.evaluation_mut().record_routing(
+            true,
+            &self.global_routing_map.keys().cloned().collect::<Vec<_>>(),
+        );
+        // Record signal executions from global evaluation
+        for signal in signal_executions {
+            phase.record_signal(signal);
+        }
+        phase.evaluation_mut().record_wasm_result(decision_set);
+        phase.evaluation_mut().record_final_decision(decision);
+    }
+}
+
+/// Record the early exit taken when no policy matched the event.
+fn record_no_policies_matched(telemetry: &mut Option<&mut TelemetryContext>) {
+    with_current_phase(telemetry, |phase| {
+        phase
+            .evaluation_mut()
+            .record_exit("No policies matched - implicit allow");
+        phase
+            .evaluation_mut()
+            .record_final_decision(&decision::FinalDecision::Allow { context: vec![] });
+        phase.finalize();
+    });
+}
+
+/// Gather signals for the matched policies, collecting their executions when telemetry is on.
+async fn gather_signals_for_evaluation(
+    exec: &executor::Executor<'_>,
+    safe_input: &Value,
+    matched_policies: &[PolicyUnit],
+    capture_telemetry: bool,
+) -> Result<(Value, Vec<crate::telemetry::span::SignalExecution>)> {
+    if capture_telemetry {
+        let mut signal_telemetry = SignalTelemetry::new();
+        let result = exec
+            .gather_signals(safe_input, matched_policies, Some(&mut signal_telemetry))
+            .await?;
+        Ok((result, signal_telemetry.signals))
+    } else {
+        let result = exec
+            .gather_signals(safe_input, matched_policies, None)
+            .await?;
+        Ok((result, Vec::new()))
     }
 }

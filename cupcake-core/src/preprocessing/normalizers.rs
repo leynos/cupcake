@@ -109,55 +109,66 @@ impl WhitespaceNormalizer {
 
         // Check for consecutive whitespace or tabs
         let mut prev_was_space = false;
-        let mut in_single_quote = false;
-        let mut in_double_quote = false;
-        let mut escape_next = false;
+        let mut quotes = QuoteState::default();
 
         for ch in command.chars() {
-            if escape_next {
-                escape_next = false;
+            // Quoting syntax and quoted text are never normalized
+            if quotes.consume_syntax(ch) || quotes.is_quoted() {
                 prev_was_space = false;
                 continue;
             }
 
-            if ch == '\\' && !in_single_quote {
-                escape_next = true;
-                prev_was_space = false;
-                continue;
+            if matches!(ch, '\t' | '\n' | '\r') {
+                return true; // Contains tab or newline
             }
 
-            if ch == '\'' && !in_double_quote {
-                in_single_quote = !in_single_quote;
-                prev_was_space = false;
-                continue;
-            }
-
-            if ch == '"' && !in_single_quote {
-                in_double_quote = !in_double_quote;
-                prev_was_space = false;
-                continue;
-            }
-
-            // Only check outside quotes
-            if !in_single_quote && !in_double_quote {
-                if matches!(ch, '\t' | '\n' | '\r') {
-                    return true; // Contains tab or newline
+            if ch == ' ' {
+                if prev_was_space {
+                    return true; // Consecutive spaces
                 }
-
-                if ch == ' ' {
-                    if prev_was_space {
-                        return true; // Consecutive spaces
-                    }
-                    prev_was_space = true;
-                } else {
-                    prev_was_space = false;
-                }
+                prev_was_space = true;
             } else {
                 prev_was_space = false;
             }
         }
 
         false
+    }
+}
+
+/// Quote and escape state while scanning a shell command.
+#[derive(Default)]
+struct QuoteState {
+    in_single_quote: bool,
+    in_double_quote: bool,
+    escape_next: bool,
+}
+
+impl QuoteState {
+    /// Update the state for `ch`; returns true when `ch` is escaped or is escape or quote syntax.
+    fn consume_syntax(&mut self, ch: char) -> bool {
+        if self.escape_next {
+            self.escape_next = false;
+            return true;
+        }
+        if ch == '\\' && !self.in_single_quote {
+            self.escape_next = true;
+            return true;
+        }
+        if ch == '\'' && !self.in_double_quote {
+            self.in_single_quote = !self.in_single_quote;
+            return true;
+        }
+        if ch == '"' && !self.in_single_quote {
+            self.in_double_quote = !self.in_double_quote;
+            return true;
+        }
+        false
+    }
+
+    /// True while inside single or double quotes.
+    fn is_quoted(&self) -> bool {
+        self.in_single_quote || self.in_double_quote
     }
 }
 
@@ -292,6 +303,22 @@ mod tests {
         assert!(!WhitespaceNormalizer::would_normalize("rm -rf"));
         assert!(!WhitespaceNormalizer::would_normalize("echo 'test  test'"));
         assert!(!WhitespaceNormalizer::would_normalize("ls -la"));
+    }
+
+    #[test]
+    fn test_would_normalize_respects_quotes_and_escapes() {
+        // Double-quoted, escaped and mixed-quote runs are preserved, not normalized
+        assert!(!WhitespaceNormalizer::would_normalize("echo \"a  b\""));
+        assert!(!WhitespaceNormalizer::would_normalize("echo a\\  b"));
+        assert!(!WhitespaceNormalizer::would_normalize("echo \"it's  ok\""));
+        assert!(!WhitespaceNormalizer::would_normalize(
+            "echo 'say \"a  b\"'"
+        ));
+        // Whitespace after the closing quote is outside the quotes again
+        assert!(WhitespaceNormalizer::would_normalize("echo 'a'  b"));
+        assert!(WhitespaceNormalizer::would_normalize("echo \"a\"\tb"));
+        // A backslash is literal inside single quotes, so the quote still closes
+        assert!(WhitespaceNormalizer::would_normalize("echo 'a\\'  b"));
     }
 
     #[test]
