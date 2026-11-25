@@ -98,74 +98,8 @@ impl<'a> Executor<'a> {
             return Ok(input.clone());
         };
 
-        // Collect required signals from matched policies
-        let mut required_signals = std::collections::HashSet::new();
-        for policy in matched_policies {
-            for signal_name in &policy.routing.required_signals {
-                required_signals.insert(signal_name.clone());
-            }
-        }
-
-        // Auto-add signals for global builtin policies
-        for policy in matched_policies {
-            let is_global_builtin = policy
-                .package_name
-                .starts_with("cupcake.global.policies.builtins.");
-            let is_project_builtin = policy
-                .package_name
-                .starts_with("cupcake.policies.builtins.");
-
-            if is_global_builtin || is_project_builtin {
-                let prefix = if is_global_builtin {
-                    "cupcake.global.policies.builtins."
-                } else {
-                    "cupcake.policies.builtins."
-                };
-
-                let builtin_name = policy.package_name.strip_prefix(prefix).unwrap_or("");
-
-                // Add all signals that match this builtin's pattern
-                let signal_prefix = format!("__builtin_{builtin_name}_");
-                for signal_name in rulebook.signals.keys() {
-                    if signal_name.starts_with(&signal_prefix) {
-                        debug!(
-                            "Auto-adding signal '{}' for global builtin '{}'",
-                            signal_name, builtin_name
-                        );
-                        required_signals.insert(signal_name.clone());
-                    }
-                }
-
-                // Also check for signals without the trailing underscore
-                let signal_prefix_no_underscore = format!("__builtin_{builtin_name}");
-                for signal_name in rulebook.signals.keys() {
-                    if signal_name.starts_with(&signal_prefix_no_underscore)
-                        && !signal_name.starts_with(&signal_prefix)
-                    {
-                        debug!(
-                            "Auto-adding signal '{}' for global builtin '{}'",
-                            signal_name, builtin_name
-                        );
-                        required_signals.insert(signal_name.clone());
-                    }
-                }
-            }
-        }
-
-        // Always inject builtin config from global rulebook
-        let mut enriched_input = input.clone();
-        if let Some(input_obj) = enriched_input.as_object_mut() {
-            debug!("Injecting builtin configs from global rulebook");
-            let builtin_config = rulebook.builtins.to_json_configs();
-
-            if !builtin_config.is_empty() {
-                debug!("Injected {} builtin configurations", builtin_config.len());
-                input_obj.insert(
-                    "builtin_config".to_string(),
-                    serde_json::Value::Object(builtin_config),
-                );
-            }
-        }
+        let required_signals = collect_required_global_signals(matched_policies, rulebook);
+        let mut enriched_input = inject_builtin_config(input, rulebook);
 
         if required_signals.is_empty() {
             debug!("No global signals required - returning with builtin config");
@@ -193,5 +127,124 @@ impl<'a> Executor<'a> {
         }
 
         Ok(enriched_input)
+    }
+}
+
+const GLOBAL_BUILTIN_PREFIX: &str = "cupcake.global.policies.builtins.";
+const PROJECT_BUILTIN_PREFIX: &str = "cupcake.policies.builtins.";
+
+/// Collect the signals the matched policies declare, plus those their builtins imply.
+fn collect_required_global_signals(
+    matched_policies: &[PolicyUnit],
+    rulebook: &Rulebook,
+) -> std::collections::HashSet<String> {
+    let mut required_signals = std::collections::HashSet::new();
+    for policy in matched_policies {
+        required_signals.extend(policy.routing.required_signals.iter().cloned());
+    }
+    for policy in matched_policies {
+        if let Some(builtin_name) = builtin_name_of(&policy.package_name) {
+            add_builtin_signals(&mut required_signals, rulebook, builtin_name);
+        }
+    }
+    required_signals
+}
+
+/// Return the builtin name when the package belongs to a global or project builtin.
+fn builtin_name_of(package_name: &str) -> Option<&str> {
+    package_name
+        .strip_prefix(GLOBAL_BUILTIN_PREFIX)
+        .or_else(|| package_name.strip_prefix(PROJECT_BUILTIN_PREFIX))
+}
+
+/// Add every rulebook signal whose name starts with the builtin's `__builtin_<name>` prefix.
+fn add_builtin_signals(
+    required_signals: &mut std::collections::HashSet<String>,
+    rulebook: &Rulebook,
+    builtin_name: &str,
+) {
+    let signal_prefix = format!("__builtin_{builtin_name}");
+    for signal_name in rulebook.signals.keys() {
+        if signal_name.starts_with(&signal_prefix) {
+            debug!(
+                "Auto-adding signal '{}' for global builtin '{}'",
+                signal_name, builtin_name
+            );
+            required_signals.insert(signal_name.clone());
+        }
+    }
+}
+
+/// Clone the input and attach the global rulebook's builtin configs when it is an object.
+fn inject_builtin_config(input: &Value, rulebook: &Rulebook) -> Value {
+    let mut enriched_input = input.clone();
+    if let Some(input_obj) = enriched_input.as_object_mut() {
+        debug!("Injecting builtin configs from global rulebook");
+        let builtin_config = rulebook.builtins.to_json_configs();
+
+        if !builtin_config.is_empty() {
+            debug!("Injected {} builtin configurations", builtin_config.len());
+            input_obj.insert(
+                "builtin_config".to_string(),
+                serde_json::Value::Object(builtin_config),
+            );
+        }
+    }
+    enriched_input
+}
+
+#[cfg(test)]
+mod tests {
+    //! Tests for the global-signal collection helpers.
+
+    use super::*;
+
+    fn signal(command: &str) -> crate::engine::rulebook::SignalConfig {
+        crate::engine::rulebook::SignalConfig {
+            command: command.to_string(),
+            timeout_seconds: 5,
+        }
+    }
+
+    #[test]
+    fn builtin_name_of_strips_either_builtin_prefix() {
+        assert_eq!(
+            builtin_name_of("cupcake.global.policies.builtins.git_guard"),
+            Some("git_guard")
+        );
+        assert_eq!(
+            builtin_name_of("cupcake.policies.builtins.git_guard"),
+            Some("git_guard")
+        );
+        assert_eq!(builtin_name_of("cupcake.policies.custom"), None);
+    }
+
+    #[test]
+    fn add_builtin_signals_matches_with_and_without_trailing_underscore() {
+        let mut rulebook = Rulebook::default();
+        for name in [
+            "__builtin_git_guard_status",
+            "__builtin_git_guard",
+            "__builtin_other_status",
+        ] {
+            rulebook.signals.insert(name.to_string(), signal("true"));
+        }
+
+        let mut required = std::collections::HashSet::new();
+        add_builtin_signals(&mut required, &rulebook, "git_guard");
+
+        let mut found: Vec<_> = required.into_iter().collect();
+        found.sort();
+        assert_eq!(found, ["__builtin_git_guard", "__builtin_git_guard_status"]);
+    }
+
+    #[test]
+    fn inject_builtin_config_leaves_non_objects_and_empty_configs_unchanged() {
+        let rulebook = Rulebook::default();
+        let object = serde_json::json!({"tool": "Bash"});
+        assert_eq!(inject_builtin_config(&object, &rulebook), object);
+
+        let scalar = serde_json::json!("text");
+        assert_eq!(inject_builtin_config(&scalar, &rulebook), scalar);
     }
 }

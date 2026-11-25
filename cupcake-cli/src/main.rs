@@ -440,13 +440,7 @@ async fn eval_command(
     let harness_type = engine_config.harness;
 
     // Read hook event from stdin and parse JSON once (reused for path resolution and evaluation)
-    let mut stdin_buffer = String::new();
-    io::stdin()
-        .read_to_string(&mut stdin_buffer)
-        .context("Failed to read hook event from stdin")?;
-
-    let mut hook_event_json: serde_json::Value =
-        serde_json::from_str(&stdin_buffer).context("Failed to parse hook event JSON")?;
+    let (stdin_buffer, mut hook_event_json) = read_hook_event()?;
 
     // TELEMETRY: Capture raw event BEFORE any preprocessing mutations
     let raw_event_for_telemetry = hook_event_json.clone();
@@ -464,21 +458,7 @@ async fn eval_command(
     );
 
     // Initialize the engine with configuration - MUST succeed or we exit
-    let engine = match engine::Engine::new_with_config(&resolved_policy_dir, engine_config).await {
-        Ok(e) => {
-            debug!("Engine initialized successfully");
-            e
-        }
-        Err(e) => {
-            error!("Fatal: Cupcake engine failed to initialize: {:#}", e);
-            eprintln!("\nError: Could not start the Cupcake engine.");
-            eprintln!(
-                "Please ensure the OPA CLI is installed and accessible in your system's PATH."
-            );
-            eprintln!("You can download it from: https://www.openpolicyagent.org/docs/latest/#running-opa");
-            std::process::exit(1);
-        }
-    };
+    let engine = new_engine_or_exit(&resolved_policy_dir, engine_config).await;
 
     // Apply input preprocessing to normalize adversarial patterns
     // This protects all policies (user and builtin) from spacing bypasses
@@ -497,17 +477,7 @@ async fn eval_command(
 
     // Add hookEventName field for the engine if not present (for routing compatibility)
     // The engine routing needs this field
-    if let Some(obj) = hook_event_json.as_object_mut() {
-        if !obj.contains_key("hookEventName") && !obj.contains_key("hook_event_name") {
-            // Extract event name from the JSON
-            if let Some(event_name) = obj.get("hook_event_name").and_then(|v| v.as_str()) {
-                obj.insert(
-                    "hookEventName".to_string(),
-                    serde_json::Value::String(event_name.to_string()),
-                );
-            }
-        }
-    }
+    add_hook_event_name(&mut hook_event_json);
 
     // Get telemetry config from the engine
     let telemetry_config = engine.telemetry_config().cloned();
@@ -519,24 +489,20 @@ async fn eval_command(
     // Create TelemetryContext if enabled via CLI flag OR telemetry config
     // This captures raw event (before preprocessing) and will track enrichment + evaluation
     let mut telemetry_ctx = if debug_files_enabled || telemetry_enabled {
-        let trace_id = cupcake_core::engine::trace::generate_trace_id();
-        let mut ctx = TelemetryContext::new(raw_event_for_telemetry, harness_type, trace_id);
-
-        // Configure output destinations
-        ctx.configure(
-            debug_files_enabled,
-            debug_dir.clone(),
-            telemetry_config.clone(),
-        );
-
-        // Record enrichment (preprocessing results) - use actual operations applied
-        ctx.record_enrichment(
-            hook_event_json.clone(),
-            preprocess_result.applied_operations.clone(),
-            preprocess_duration_us,
-        );
-
-        Some(ctx)
+        Some(build_telemetry_context(
+            raw_event_for_telemetry,
+            harness_type,
+            TelemetrySettings {
+                debug_files_enabled,
+                debug_dir,
+                telemetry_config,
+            },
+            EnrichmentRecord {
+                event: hook_event_json.clone(),
+                applied_operations: preprocess_result.applied_operations.clone(),
+                duration_us: preprocess_duration_us,
+            },
+        ))
     } else {
         None
     };
@@ -574,29 +540,7 @@ async fn eval_command(
     // - Here we need strongly-typed event structs for type-safe response formatting
     // - The format_response() methods require specific event types (ClaudeCodeEvent, CursorEvent, etc.)
     // - Attempting to convert Value -> typed struct would require the same deserialization work
-    let response = match harness_type {
-        cupcake_core::harness::types::HarnessType::ClaudeCode => {
-            let event = serde_json::from_str::<harness::events::claude_code::ClaudeCodeEvent>(
-                &stdin_buffer,
-            )?;
-            harness::ClaudeHarness::format_response(&event, &decision)?
-        }
-        cupcake_core::harness::types::HarnessType::Cursor => {
-            let event =
-                serde_json::from_str::<harness::events::cursor::CursorEvent>(&stdin_buffer)?;
-            harness::CursorHarness::format_response(&event, &decision)?
-        }
-        cupcake_core::harness::types::HarnessType::Factory => {
-            let event =
-                serde_json::from_str::<harness::events::factory::FactoryEvent>(&stdin_buffer)?;
-            harness::FactoryHarness::format_response(&event, &decision)?
-        }
-        cupcake_core::harness::types::HarnessType::OpenCode => {
-            let event =
-                serde_json::from_str::<harness::events::opencode::OpenCodeEvent>(&stdin_buffer)?;
-            harness::OpenCodeHarness::format_response(&event, &decision)?
-        }
-    };
+    let response = format_harness_response(harness_type, &stdin_buffer, &decision)?;
 
     // Finalize telemetry with response - this is the primary write mechanism.
     // (Drop impl provides fallback if finalize() isn't called, e.g., on early error exit)
@@ -618,17 +562,147 @@ async fn eval_command(
     Ok(())
 }
 
-async fn verify_command(
-    harness: cupcake_core::harness::types::HarnessType,
-    policy_dir: PathBuf,
-) -> Result<()> {
+/// Read the hook event from stdin, returning the raw text and its parsed JSON.
+fn read_hook_event() -> Result<(String, serde_json::Value)> {
+    let mut stdin_buffer = String::new();
+    io::stdin()
+        .read_to_string(&mut stdin_buffer)
+        .context("Failed to read hook event from stdin")?;
+
+    let hook_event_json: serde_json::Value =
+        serde_json::from_str(&stdin_buffer).context("Failed to parse hook event JSON")?;
+    Ok((stdin_buffer, hook_event_json))
+}
+
+/// Build the engine, or print set-up guidance and exit with status 1 on failure.
+async fn new_engine_or_exit(
+    policy_dir: &Path,
+    engine_config: engine::EngineConfig,
+) -> engine::Engine {
+    match engine::Engine::new_with_config(policy_dir, engine_config).await {
+        Ok(e) => {
+            debug!("Engine initialized successfully");
+            e
+        }
+        Err(e) => {
+            error!("Fatal: Cupcake engine failed to initialize: {:#}", e);
+            eprintln!("\nError: Could not start the Cupcake engine.");
+            eprintln!(
+                "Please ensure the OPA CLI is installed and accessible in your system's PATH."
+            );
+            eprintln!("You can download it from: https://www.openpolicyagent.org/docs/latest/#running-opa");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Mirror `hook_event_name` into `hookEventName` for engine routing when only one is absent.
+fn add_hook_event_name(hook_event_json: &mut serde_json::Value) {
+    let Some(obj) = hook_event_json.as_object_mut() else {
+        return;
+    };
+    if obj.contains_key("hookEventName") || obj.contains_key("hook_event_name") {
+        return;
+    }
+    // Extract event name from the JSON
+    if let Some(event_name) = obj.get("hook_event_name").and_then(|v| v.as_str()) {
+        obj.insert(
+            "hookEventName".to_string(),
+            serde_json::Value::String(event_name.to_string()),
+        );
+    }
+}
+
+/// Where a telemetry context writes its output.
+struct TelemetrySettings {
+    debug_files_enabled: bool,
+    debug_dir: Option<PathBuf>,
+    telemetry_config: Option<engine::TelemetryConfig>,
+}
+
+/// The result of input preprocessing, as recorded in telemetry.
+struct EnrichmentRecord {
+    event: serde_json::Value,
+    applied_operations: Vec<String>,
+    duration_us: u64,
+}
+
+/// Create a telemetry context holding the raw event and the preprocessing record.
+fn build_telemetry_context(
+    raw_event: serde_json::Value,
+    harness_type: cupcake_core::harness::types::HarnessType,
+    settings: TelemetrySettings,
+    enrichment: EnrichmentRecord,
+) -> TelemetryContext {
+    let trace_id = cupcake_core::engine::trace::generate_trace_id();
+    let mut ctx = TelemetryContext::new(raw_event, harness_type, trace_id);
+
+    // Configure output destinations
+    ctx.configure(
+        settings.debug_files_enabled,
+        settings.debug_dir,
+        settings.telemetry_config,
+    );
+
+    // Record enrichment (preprocessing results) - use actual operations applied
+    ctx.record_enrichment(
+        enrichment.event,
+        enrichment.applied_operations,
+        enrichment.duration_us,
+    );
+    ctx
+}
+
+/// Re-parse the raw event into the harness's typed event and format the decision for it.
+///
+/// The typed parse is intentional: `format_response` needs the concrete event type, while
+/// the engine evaluates the generic JSON value.
+fn format_harness_response(
+    harness_type: cupcake_core::harness::types::HarnessType,
+    stdin_buffer: &str,
+    decision: &engine::decision::FinalDecision,
+) -> Result<serde_json::Value> {
+    use cupcake_core::harness::types::HarnessType;
+    match harness_type {
+        HarnessType::ClaudeCode => {
+            parse_and_format::<harness::events::claude_code::ClaudeCodeEvent>(
+                stdin_buffer,
+                decision,
+                harness::ClaudeHarness::format_response,
+            )
+        }
+        HarnessType::Cursor => parse_and_format::<harness::events::cursor::CursorEvent>(
+            stdin_buffer,
+            decision,
+            harness::CursorHarness::format_response,
+        ),
+        HarnessType::Factory => parse_and_format::<harness::events::factory::FactoryEvent>(
+            stdin_buffer,
+            decision,
+            harness::FactoryHarness::format_response,
+        ),
+        HarnessType::OpenCode => parse_and_format::<harness::events::opencode::OpenCodeEvent>(
+            stdin_buffer,
+            decision,
+            harness::OpenCodeHarness::format_response,
+        ),
+    }
+}
+
+/// Parse `stdin_buffer` as the harness event type `E` and format the decision with `format`.
+fn parse_and_format<E: serde::de::DeserializeOwned>(
+    stdin_buffer: &str,
+    decision: &engine::decision::FinalDecision,
+    format: fn(&E, &engine::decision::FinalDecision) -> Result<serde_json::Value>,
+) -> Result<serde_json::Value> {
+    let event = serde_json::from_str::<E>(stdin_buffer)?;
+    format(&event, decision)
+}
+
+/// Print whether the global configuration exists, and how many policies it holds.
+fn print_global_config_status() -> Result<()> {
     use cupcake_core::engine::global_config::GlobalPaths;
 
-    info!("Verifying Cupcake engine configuration...");
-    info!("Harness type: {:?}", harness);
-    info!("Policy directory: {:?}", policy_dir);
-
-    // Check for global configuration
     println!("\n=== Global Configuration ===");
     match GlobalPaths::discover()? {
         Some(global_paths) if global_paths.is_initialized() => {
@@ -661,46 +735,21 @@ async fn verify_command(
             println!("   Or use --global-config <PATH> to specify a custom location");
         }
     }
+    Ok(())
+}
 
-    // Initialize the engine - MUST succeed or we exit
-    println!("\n=== Project Configuration ===");
-    let engine = match engine::Engine::new(&policy_dir, harness).await {
-        Ok(e) => {
-            println!("✅ Engine initialized successfully");
-            e
-        }
-        Err(e) => {
-            error!("Fatal: Cupcake engine failed to initialize: {:#}", e);
-            eprintln!("\n❌ Error: Could not start the Cupcake engine.");
-            eprintln!(
-                "   Please ensure the OPA CLI is installed and accessible in your system's PATH."
-            );
-            eprintln!("   You can download it from: https://www.openpolicyagent.org/docs/latest/#running-opa");
-            std::process::exit(1);
-        }
-    };
-
-    // Display routing maps
-    println!("\n=== Project Routing Map ===");
-    for (key, policies) in engine.routing_map() {
+/// Print a routing map as `key -> n policies` with one line per policy package.
+fn print_routing_map(map: &std::collections::HashMap<String, Vec<engine::PolicyUnit>>) {
+    for (key, policies) in map {
         println!("  {} -> {} policies", key, policies.len());
         for policy in policies {
             println!("    - {}", policy.package_name);
         }
     }
+}
 
-    // Display global routing map if it exists
-    if !engine.global_routing_map().is_empty() {
-        println!("\n=== Global Routing Map ===");
-        for (key, policies) in engine.global_routing_map() {
-            println!("  {} -> {} policies", key, policies.len());
-            for policy in policies {
-                println!("    - {}", policy.package_name);
-            }
-        }
-    }
-
-    // Check WASM modules
+/// Print the compiled WASM size of the project and global policy modules.
+fn print_wasm_status(engine: &engine::Engine) {
     println!("\n=== WASM Compilation ===");
     if let Some(wasm) = engine.wasm_module() {
         println!("  Project WASM: {} bytes ✅", wasm.len());
@@ -714,6 +763,55 @@ async fn verify_command(
     } else {
         println!("  Global WASM:  Not compiled (no global policies or only system policies)");
     }
+}
+
+/// Build the engine for `verify`, or print set-up guidance and exit with status 1.
+async fn verify_engine_or_exit(
+    policy_dir: &Path,
+    harness: cupcake_core::harness::types::HarnessType,
+) -> engine::Engine {
+    match engine::Engine::new(policy_dir, harness).await {
+        Ok(e) => {
+            println!("✅ Engine initialized successfully");
+            e
+        }
+        Err(e) => {
+            error!("Fatal: Cupcake engine failed to initialize: {:#}", e);
+            eprintln!("\n❌ Error: Could not start the Cupcake engine.");
+            eprintln!(
+                "   Please ensure the OPA CLI is installed and accessible in your system's PATH."
+            );
+            eprintln!("   You can download it from: https://www.openpolicyagent.org/docs/latest/#running-opa");
+            std::process::exit(1);
+        }
+    }
+}
+
+async fn verify_command(
+    harness: cupcake_core::harness::types::HarnessType,
+    policy_dir: PathBuf,
+) -> Result<()> {
+    info!("Verifying Cupcake engine configuration...");
+    info!("Harness type: {:?}", harness);
+    info!("Policy directory: {:?}", policy_dir);
+
+    print_global_config_status()?;
+
+    // Initialize the engine - MUST succeed or we exit
+    println!("\n=== Project Configuration ===");
+    let engine = verify_engine_or_exit(&policy_dir, harness).await;
+
+    // Display routing maps
+    println!("\n=== Project Routing Map ===");
+    print_routing_map(engine.routing_map());
+
+    // Display global routing map if it exists
+    if !engine.global_routing_map().is_empty() {
+        println!("\n=== Global Routing Map ===");
+        print_routing_map(engine.global_routing_map());
+    }
+
+    print_wasm_status(&engine);
 
     println!("\n✅ Verification complete!");
     Ok(())
