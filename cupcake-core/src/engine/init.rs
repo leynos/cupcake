@@ -297,3 +297,42 @@ fn move_to_global_namespace(unit: &mut PolicyUnit) {
         .replace("cupcake.policies", "cupcake.global.policies")
         .replace("cupcake.system", "cupcake.global.system");
 }
+
+#[cfg(test)]
+mod tests {
+    //! Tests for the global-namespace rewrite used when parsing global policies.
+
+    use super::*;
+
+    fn unit(package_name: &str) -> PolicyUnit {
+        PolicyUnit {
+            path: std::path::PathBuf::from("policy.rego"),
+            package_name: package_name.to_string(),
+            routing: Default::default(),
+            metadata: None,
+        }
+    }
+
+    #[test]
+    fn move_to_global_namespace_rewrites_policy_and_system_packages() {
+        for (before, after) in [
+            ("cupcake.policies.custom", "cupcake.global.policies.custom"),
+            (
+                "cupcake.policies.builtins.git_guard",
+                "cupcake.global.policies.builtins.git_guard",
+            ),
+            ("cupcake.system", "cupcake.global.system"),
+        ] {
+            let mut policy = unit(before);
+            move_to_global_namespace(&mut policy);
+            assert_eq!(policy.package_name, after);
+        }
+    }
+
+    #[test]
+    fn move_to_global_namespace_leaves_global_packages_unchanged() {
+        let mut policy = unit("cupcake.global.policies.custom");
+        move_to_global_namespace(&mut policy);
+        assert_eq!(policy.package_name, "cupcake.global.policies.custom");
+    }
+}

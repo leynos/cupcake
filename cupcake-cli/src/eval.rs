@@ -335,20 +335,35 @@ mod tests {
 
         let result = format_harness_response(HarnessType::ClaudeCode, &event, &allow());
 
-        assert!(result.is_ok(), "unexpected error: {result:?}");
+        assert_eq!(result.expect("allow formats"), json!({}));
+
+        let blocked = format_harness_response(
+            HarnessType::ClaudeCode,
+            &event,
+            &engine::decision::FinalDecision::Block {
+                reason: "no".to_string(),
+                agent_messages: Vec::new(),
+            },
+        );
+        assert_eq!(
+            blocked.expect("block formats"),
+            json!({"decision": "block", "reason": "no"})
+        );
     }
 
     #[test]
     fn build_telemetry_context_keeps_the_event_harness_and_enrichment() {
         let raw = json!({"tool_name": "Bash"});
         let enriched = json!({"tool_name": "Bash", "normalized": true});
+        // Created before `ctx` so it outlives the debug file written when `ctx` drops.
+        let debug_dir = tempfile::tempdir().expect("temporary debug directory");
 
         let ctx = build_telemetry_context(
             raw.clone(),
             HarnessType::Cursor,
             TelemetrySettings {
                 debug_files_enabled: true,
-                debug_dir: None,
+                debug_dir: Some(debug_dir.path().to_path_buf()),
                 telemetry_config: None,
             },
             EnrichmentRecord {
