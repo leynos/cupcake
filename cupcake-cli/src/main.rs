@@ -1564,52 +1564,7 @@ async fn inspect_command(policy_dir: PathBuf, json: bool, table: bool) -> Result
     let mut policies_metadata = Vec::new();
 
     for path in &policy_files {
-        let content = fs_access::read_to_string(path)
-            .with_context(|| format!("Failed to read policy file: {path:?}"))?;
-
-        // Parse metadata using the engine's metadata parser
-        let metadata = match engine::metadata::parse_metadata(&content) {
-            Ok(Some(meta)) => meta,
-            Ok(None) | Err(_) => {
-                // No metadata or parse error - create empty metadata
-                engine::metadata::PolicyMetadata {
-                    scope: None,
-                    title: None,
-                    authors: vec![],
-                    organizations: vec![],
-                    custom: engine::metadata::CustomMetadata::default(),
-                }
-            }
-        };
-
-        // Extract package name
-        let package_name = content
-            .lines()
-            .find(|line| line.trim().starts_with("package "))
-            .map(|line| line.trim_start_matches("package ").trim().to_string())
-            .unwrap_or_else(|| "unknown".to_string());
-
-        // Check if it's a builtin
-        let is_builtin = path.components().any(|c| c.as_os_str() == "builtins");
-
-        let routing = metadata.custom.routing.as_ref();
-
-        policies_metadata.push(serde_json::json!({
-            "path": path.display().to_string(),
-            "package": package_name,
-            "is_builtin": is_builtin,
-            "routing": {
-                "required_events": routing.map(|r| r.required_events.clone()).unwrap_or_default(),
-                "required_tools": routing.map(|r| r.required_tools.clone()).unwrap_or_default(),
-                "required_signals": routing.map(|r| r.required_signals.clone()).unwrap_or_default(),
-            },
-            "metadata": {
-                "title": metadata.title,
-                "authors": metadata.authors,
-                "organizations": metadata.organizations,
-                "scope": metadata.scope,
-            }
-        }));
+        policies_metadata.push(inspect_policy_file(path)?);
     }
 
     if json {
@@ -1621,152 +1576,197 @@ async fn inspect_command(policy_dir: PathBuf, json: bool, table: bool) -> Result
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else if table {
         // Output as table
-        let mut table_rows = Vec::new();
-
-        for policy in &policies_metadata {
-            let package = policy
-                .get("package")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown");
-
-            // Shorten package name if too long
-            let package_short = if package.starts_with("cupcake.") {
-                package.trim_start_matches("cupcake.").to_string()
-            } else {
-                package.to_string()
-            };
-
-            let is_builtin = policy
-                .get("is_builtin")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-
-            let policy_type = if is_builtin { "builtin" } else { "custom" }.to_string();
-
-            // Get routing info
-            let events = policy
-                .get("routing")
-                .and_then(|r| r.get("required_events"))
-                .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|e| e.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                })
-                .unwrap_or_else(|| "-".to_string());
-
-            let tools = policy
-                .get("routing")
-                .and_then(|r| r.get("required_tools"))
-                .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|t| t.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                })
-                .unwrap_or_else(|| "-".to_string());
-
-            // Get title, truncate if too long
-            let title = policy
-                .get("metadata")
-                .and_then(|m| m.get("title"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("-");
-
-            let title_truncated = if title.len() > 40 {
-                format!("{}...", &title[..37])
-            } else {
-                title.to_string()
-            };
-
-            table_rows.push(PolicyTableRow {
-                package: package_short,
-                events,
-                tools,
-                title: title_truncated,
-                policy_type,
-            });
-        }
-
-        if !table_rows.is_empty() {
-            let table = Table::new(&table_rows)
-                .with(Style::rounded())
-                .with(Modify::new(Rows::first()).with(Alignment::center()))
-                .to_string();
-
-            println!("Found {} policies\n", policies_metadata.len());
-            println!("{table}");
-        } else {
-            println!("No policies found.");
-        }
+        print_policies_table(&policies_metadata);
     } else {
         // Output as human-readable format
         println!("Found {} policies\n", policies_metadata.len());
 
         for policy in &policies_metadata {
-            let path = policy
-                .get("path")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown");
-            let package = policy
-                .get("package")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown");
-            let is_builtin = policy
-                .get("is_builtin")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-
-            println!("Policy: {path}");
-            println!("  Package: {package}");
-            if is_builtin {
-                println!("  Type: Builtin");
-            }
-
-            if let Some(routing) = policy.get("routing") {
-                if let Some(events) = routing.get("required_events").and_then(|v| v.as_array()) {
-                    if !events.is_empty() {
-                        let events_str: Vec<String> = events
-                            .iter()
-                            .filter_map(|e| e.as_str().map(String::from))
-                            .collect();
-                        println!("  Required Events: {}", events_str.join(", "));
-                    }
-                }
-
-                if let Some(tools) = routing.get("required_tools").and_then(|v| v.as_array()) {
-                    if !tools.is_empty() {
-                        let tools_str: Vec<String> = tools
-                            .iter()
-                            .filter_map(|t| t.as_str().map(String::from))
-                            .collect();
-                        println!("  Required Tools: {}", tools_str.join(", "));
-                    }
-                }
-            }
-
-            if let Some(metadata) = policy.get("metadata") {
-                if let Some(title) = metadata.get("title").and_then(|v| v.as_str()) {
-                    println!("  Title: {title}");
-                }
-                if let Some(authors) = metadata.get("authors").and_then(|v| v.as_array()) {
-                    if !authors.is_empty() {
-                        let authors_str: Vec<String> = authors
-                            .iter()
-                            .filter_map(|a| a.as_str().map(String::from))
-                            .collect();
-                        println!("  Authors: {}", authors_str.join(", "));
-                    }
-                }
-            }
-
-            println!();
+            print_policy_details(policy);
         }
     }
 
     Ok(())
+}
+
+/// Read one `.rego` file and describe it as the JSON object `inspect` reports.
+fn inspect_policy_file(path: &Path) -> Result<serde_json::Value> {
+    let content = fs_access::read_to_string(path)
+        .with_context(|| format!("Failed to read policy file: {path:?}"))?;
+
+    // Parse metadata using the engine's metadata parser
+    let metadata = match engine::metadata::parse_metadata(&content) {
+        Ok(Some(meta)) => meta,
+        Ok(None) | Err(_) => {
+            // No metadata or parse error - create empty metadata
+            engine::metadata::PolicyMetadata {
+                scope: None,
+                title: None,
+                authors: vec![],
+                organizations: vec![],
+                custom: engine::metadata::CustomMetadata::default(),
+            }
+        }
+    };
+
+    // Extract package name
+    let package_name = content
+        .lines()
+        .find(|line| line.trim().starts_with("package "))
+        .map(|line| line.trim_start_matches("package ").trim().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    // Check if it's a builtin
+    let is_builtin = path.components().any(|c| c.as_os_str() == "builtins");
+
+    let routing = metadata.custom.routing.as_ref();
+
+    Ok(serde_json::json!({
+        "path": path.display().to_string(),
+        "package": package_name,
+        "is_builtin": is_builtin,
+        "routing": {
+            "required_events": routing.map(|r| r.required_events.clone()).unwrap_or_default(),
+            "required_tools": routing.map(|r| r.required_tools.clone()).unwrap_or_default(),
+            "required_signals": routing.map(|r| r.required_signals.clone()).unwrap_or_default(),
+        },
+        "metadata": {
+            "title": metadata.title,
+            "authors": metadata.authors,
+            "organizations": metadata.organizations,
+            "scope": metadata.scope,
+        }
+    }))
+}
+
+/// The string members of `value[section][key]`, when it is an array.
+fn string_list(value: &serde_json::Value, section: &str, key: &str) -> Option<Vec<String>> {
+    value
+        .get(section)
+        .and_then(|s| s.get(key))
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|e| e.as_str().map(String::from))
+                .collect()
+        })
+}
+
+/// Build the table row for one inspected policy.
+fn policy_table_row(policy: &serde_json::Value) -> PolicyTableRow {
+    let package = policy
+        .get("package")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+
+    // Shorten package name if too long
+    let package_short = if package.starts_with("cupcake.") {
+        package.trim_start_matches("cupcake.").to_string()
+    } else {
+        package.to_string()
+    };
+
+    let is_builtin = policy
+        .get("is_builtin")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let policy_type = if is_builtin { "builtin" } else { "custom" }.to_string();
+
+    // Get routing info
+    let events = string_list(policy, "routing", "required_events")
+        .map(|list| list.join(", "))
+        .unwrap_or_else(|| "-".to_string());
+    let tools = string_list(policy, "routing", "required_tools")
+        .map(|list| list.join(", "))
+        .unwrap_or_else(|| "-".to_string());
+
+    // Get title, truncate if too long
+    let title = policy
+        .get("metadata")
+        .and_then(|m| m.get("title"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("-");
+
+    let title_truncated = if title.chars().count() > 40 {
+        format!("{}...", title.chars().take(37).collect::<String>())
+    } else {
+        title.to_string()
+    };
+
+    PolicyTableRow {
+        package: package_short,
+        events,
+        tools,
+        title: title_truncated,
+        policy_type,
+    }
+}
+
+/// Print the inspected policies as a rounded table.
+fn print_policies_table(policies_metadata: &[serde_json::Value]) {
+    let table_rows: Vec<PolicyTableRow> = policies_metadata.iter().map(policy_table_row).collect();
+
+    if !table_rows.is_empty() {
+        let table = Table::new(&table_rows)
+            .with(Style::rounded())
+            .with(Modify::new(Rows::first()).with(Alignment::center()))
+            .to_string();
+
+        println!("Found {} policies\n", policies_metadata.len());
+        println!("{table}");
+    } else {
+        println!("No policies found.");
+    }
+}
+
+/// Print one inspected policy in the human-readable layout.
+fn print_policy_details(policy: &serde_json::Value) {
+    let path = policy
+        .get("path")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    let package = policy
+        .get("package")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    let is_builtin = policy
+        .get("is_builtin")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    println!("Policy: {path}");
+    println!("  Package: {package}");
+    if is_builtin {
+        println!("  Type: Builtin");
+    }
+
+    print_nonempty_list(
+        "  Required Events",
+        string_list(policy, "routing", "required_events"),
+    );
+    print_nonempty_list(
+        "  Required Tools",
+        string_list(policy, "routing", "required_tools"),
+    );
+
+    if let Some(title) = policy
+        .get("metadata")
+        .and_then(|m| m.get("title"))
+        .and_then(|v| v.as_str())
+    {
+        println!("  Title: {title}");
+    }
+    print_nonempty_list("  Authors", string_list(policy, "metadata", "authors"));
+
+    println!();
+}
+
+/// Print `label: a, b` when the list exists and is not empty.
+fn print_nonempty_list(label: &str, list: Option<Vec<String>>) {
+    if let Some(items) = list.filter(|items| !items.is_empty()) {
+        println!("{label}: {}", items.join(", "));
+    }
 }
 
 async fn onboard_command() -> Result<()> {
@@ -1987,3 +1987,66 @@ const OPENCODE_GLOBAL_CUPCAKE_EXEC_POLICY: &str =
 
 // Helper library (shared by all harnesses)
 const HELPERS_COMMANDS: &str = include_str!("../../fixtures/system/commands.rego");
+
+#[cfg(test)]
+mod inspect_output_tests {
+    //! Tests for the `inspect` table and list helpers.
+
+    use super::*;
+    use serde_json::json;
+
+    fn policy(package: &str, title: &str, is_builtin: bool) -> serde_json::Value {
+        json!({
+            "path": "policies/p.rego",
+            "package": package,
+            "is_builtin": is_builtin,
+            "routing": {
+                "required_events": ["PreToolUse", "PostToolUse"],
+                "required_tools": [],
+            },
+            "metadata": { "title": title, "authors": ["Ada", "Grace"] },
+        })
+    }
+
+    #[test]
+    fn table_row_shortens_the_package_and_types_the_policy() {
+        let row = policy_table_row(&policy("cupcake.policies.x", "Short", true));
+        assert_eq!(row.package, "policies.x");
+        assert_eq!(row.policy_type, "builtin");
+        assert_eq!(row.events, "PreToolUse, PostToolUse");
+        assert_eq!(row.tools, "");
+        assert_eq!(row.title, "Short");
+    }
+
+    #[test]
+    fn table_row_truncates_long_titles_by_character() {
+        let ascii = "a".repeat(41);
+        let row = policy_table_row(&policy("other.pkg", &ascii, false));
+        assert_eq!(row.title, format!("{}...", "a".repeat(37)));
+        assert_eq!(row.policy_type, "custom");
+        assert_eq!(row.package, "other.pkg");
+
+        // 41 two-byte characters: byte slicing at 37 would panic here.
+        let wide = "é".repeat(41);
+        let row = policy_table_row(&policy("p", &wide, false));
+        assert_eq!(row.title, format!("{}...", "é".repeat(37)));
+    }
+
+    #[test]
+    fn table_row_marks_missing_routing_with_a_dash() {
+        let row = policy_table_row(&json!({ "package": "p" }));
+        assert_eq!(row.events, "-");
+        assert_eq!(row.tools, "-");
+        assert_eq!(row.title, "-");
+    }
+
+    #[test]
+    fn string_list_reads_nested_string_arrays() {
+        let value = policy("p", "t", false);
+        assert_eq!(
+            string_list(&value, "metadata", "authors"),
+            Some(vec!["Ada".to_string(), "Grace".to_string()])
+        );
+        assert_eq!(string_list(&value, "metadata", "missing"), None);
+    }
+}

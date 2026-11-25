@@ -93,121 +93,137 @@ impl BuiltinsConfig {
     /// This method encapsulates the logic for transforming Rust config structs into the JSON
     /// format expected by Rego policies at input.builtin_config.<builtin_name>
     pub fn to_json_configs(&self) -> serde_json::Map<String, serde_json::Value> {
-        use serde_json::json;
+        let entries = [
+            ("protected_paths", self.protected_paths_json()),
+            (
+                "rulebook_security_guardrails",
+                self.rulebook_security_guardrails_json(),
+            ),
+            (
+                "claude_code_enforce_full_file_read",
+                self.enforce_full_file_read_json(),
+            ),
+            ("git_block_no_verify", self.git_block_no_verify_json()),
+            ("system_protection", self.system_protection_json()),
+            (
+                "sensitive_data_protection",
+                self.sensitive_data_protection_json(),
+            ),
+            (
+                "cupcake_exec_protection",
+                self.cupcake_exec_protection_json(),
+            ),
+            (
+                "claude_code_always_inject_on_prompt",
+                self.always_inject_on_prompt_json(),
+            ),
+        ];
+
         let mut configs = serde_json::Map::new();
-
-        // Add protected_paths config if enabled
-        if let Some(config) = &self.protected_paths {
-            if config.enabled {
-                configs.insert(
-                    "protected_paths".to_string(),
-                    json!({
-                        "message": config.message,
-                        "paths": config.paths,
-                    }),
-                );
+        for (name, config) in entries {
+            if let Some(config) = config {
+                configs.insert(name.to_string(), config);
             }
         }
-
-        // Add rulebook_security_guardrails config if enabled
-        if let Some(config) = &self.rulebook_security_guardrails {
-            if config.enabled {
-                configs.insert(
-                    "rulebook_security_guardrails".to_string(),
-                    json!({
-                        "message": config.message,
-                        "protected_paths": config.protected_paths,
-                    }),
-                );
-            }
-        }
-
-        // Add claude_code_enforce_full_file_read config if enabled
-        if let Some(config) = &self.claude_code_enforce_full_file_read {
-            if config.enabled {
-                configs.insert(
-                    "claude_code_enforce_full_file_read".to_string(),
-                    json!({
-                        "message": config.message,
-                        "max_lines": config.max_lines,
-                    }),
-                );
-            }
-        }
-
-        // Add git_block_no_verify config if enabled
-        if let Some(config) = &self.git_block_no_verify {
-            if config.enabled {
-                configs.insert(
-                    "git_block_no_verify".to_string(),
-                    json!({
-                        "message": config.message,
-                        "exceptions": config.exceptions,
-                    }),
-                );
-            }
-        }
-
-        // Add system_protection config if enabled
-        if let Some(config) = &self.system_protection {
-            if config.enabled {
-                configs.insert(
-                    "system_protection".to_string(),
-                    json!({
-                        "message": config.message,
-                        "additional_paths": config.additional_paths,
-                    }),
-                );
-            }
-        }
-
-        // Add sensitive_data_protection config if enabled
-        if let Some(config) = &self.sensitive_data_protection {
-            if config.enabled {
-                configs.insert(
-                    "sensitive_data_protection".to_string(),
-                    json!({
-                        "message": config.message,
-                        "additional_patterns": config.additional_patterns,
-                    }),
-                );
-            }
-        }
-
-        // Add cupcake_exec_protection config if enabled
-        if let Some(config) = &self.cupcake_exec_protection {
-            if config.enabled {
-                configs.insert(
-                    "cupcake_exec_protection".to_string(),
-                    json!({
-                        "message": config.message,
-                        "allowed_commands": config.allowed_commands,
-                    }),
-                );
-            }
-        }
-
-        // Add claude_code_always_inject_on_prompt static strings if enabled
-        if let Some(config) = &self.claude_code_always_inject_on_prompt {
-            if config.enabled {
-                let mut static_contexts = Vec::new();
-                for source in &config.context {
-                    if let ContextSource::String(s) = source {
-                        static_contexts.push(s.clone());
-                    }
-                }
-                if !static_contexts.is_empty() {
-                    configs.insert(
-                        "claude_code_always_inject_on_prompt".to_string(),
-                        json!({
-                            "static_contexts": static_contexts,
-                        }),
-                    );
-                }
-            }
-        }
-
         configs
+    }
+
+    /// `protected_paths` as injected config, when enabled.
+    fn protected_paths_json(&self) -> Option<serde_json::Value> {
+        let config = self.protected_paths.as_ref().filter(|c| c.enabled)?;
+        Some(serde_json::json!({
+            "message": config.message,
+            "paths": config.paths,
+        }))
+    }
+
+    /// `rulebook_security_guardrails` as injected config, when enabled.
+    fn rulebook_security_guardrails_json(&self) -> Option<serde_json::Value> {
+        let config = self
+            .rulebook_security_guardrails
+            .as_ref()
+            .filter(|c| c.enabled)?;
+        Some(serde_json::json!({
+            "message": config.message,
+            "protected_paths": config.protected_paths,
+        }))
+    }
+
+    /// `claude_code_enforce_full_file_read` as injected config, when enabled.
+    fn enforce_full_file_read_json(&self) -> Option<serde_json::Value> {
+        let config = self
+            .claude_code_enforce_full_file_read
+            .as_ref()
+            .filter(|c| c.enabled)?;
+        Some(serde_json::json!({
+            "message": config.message,
+            "max_lines": config.max_lines,
+        }))
+    }
+
+    /// `git_block_no_verify` as injected config, when enabled.
+    fn git_block_no_verify_json(&self) -> Option<serde_json::Value> {
+        let config = self.git_block_no_verify.as_ref().filter(|c| c.enabled)?;
+        Some(serde_json::json!({
+            "message": config.message,
+            "exceptions": config.exceptions,
+        }))
+    }
+
+    /// `system_protection` as injected config, when enabled.
+    fn system_protection_json(&self) -> Option<serde_json::Value> {
+        let config = self.system_protection.as_ref().filter(|c| c.enabled)?;
+        Some(serde_json::json!({
+            "message": config.message,
+            "additional_paths": config.additional_paths,
+        }))
+    }
+
+    /// `sensitive_data_protection` as injected config, when enabled.
+    fn sensitive_data_protection_json(&self) -> Option<serde_json::Value> {
+        let config = self
+            .sensitive_data_protection
+            .as_ref()
+            .filter(|c| c.enabled)?;
+        Some(serde_json::json!({
+            "message": config.message,
+            "additional_patterns": config.additional_patterns,
+        }))
+    }
+
+    /// `cupcake_exec_protection` as injected config, when enabled.
+    fn cupcake_exec_protection_json(&self) -> Option<serde_json::Value> {
+        let config = self
+            .cupcake_exec_protection
+            .as_ref()
+            .filter(|c| c.enabled)?;
+        Some(serde_json::json!({
+            "message": config.message,
+            "allowed_commands": config.allowed_commands,
+        }))
+    }
+
+    /// `claude_code_always_inject_on_prompt` static strings as injected
+    /// config, when enabled and at least one static string is configured.
+    fn always_inject_on_prompt_json(&self) -> Option<serde_json::Value> {
+        let config = self
+            .claude_code_always_inject_on_prompt
+            .as_ref()
+            .filter(|c| c.enabled)?;
+        let static_contexts: Vec<String> = config
+            .context
+            .iter()
+            .filter_map(|source| match source {
+                ContextSource::String(s) => Some(s.clone()),
+                _ => None,
+            })
+            .collect();
+        if static_contexts.is_empty() {
+            return None;
+        }
+        Some(serde_json::json!({
+            "static_contexts": static_contexts,
+        }))
     }
 
     /// Get the specific signal name for post_edit_check based on the file extension in the input

@@ -21,41 +21,7 @@ impl Engine {
         info!("Project rulebook loaded with convention-based discovery");
 
         // Step 0C: Initialize Watchdog if enabled in rulebook
-        // Watchdog uses directory-based configuration from .cupcake/watchdog/
-        // with fallback to ~/.config/cupcake/watchdog/ for global settings
-        if let Some(ref rulebook) = self.rulebook {
-            if rulebook.watchdog.enabled {
-                // Get watchdog directories for config/prompt loading
-                let project_watchdog_dir = self.paths.project_watchdog_dir();
-                let global_watchdog_dir = self.paths.global_watchdog_dir();
-
-                debug!(
-                    "Watchdog directories: project={:?}, global={:?}",
-                    project_watchdog_dir, global_watchdog_dir
-                );
-
-                // Use from_directories() for full directory-based config loading
-                match crate::watchdog::Watchdog::from_directories(
-                    project_watchdog_dir.as_deref(),
-                    global_watchdog_dir.as_deref(),
-                ) {
-                    Ok(watchdog) => {
-                        if watchdog.is_enabled() {
-                            info!("Watchdog initialized and ready");
-                            self.watchdog = Some(watchdog);
-                        } else {
-                            warn!("Watchdog enabled in config but failed to initialize backend");
-                        }
-                    }
-                    Err(e) => {
-                        warn!(
-                            "Failed to initialize Watchdog: {e}. Continuing without it. \
-                            Check that your API key environment variable is set and the watchdog configuration is valid."
-                        );
-                    }
-                }
-            }
-        }
+        self.initialize_watchdog();
 
         // Get list of enabled builtins for filtering
         let enabled_builtins = self
@@ -69,12 +35,7 @@ impl Engine {
         }
 
         // Determine harness-specific policies subdirectory
-        let harness_subdir = match self.config.harness {
-            crate::harness::types::HarnessType::ClaudeCode => "claude",
-            crate::harness::types::HarnessType::Cursor => "cursor",
-            crate::harness::types::HarnessType::Factory => "factory",
-            crate::harness::types::HarnessType::OpenCode => "opencode",
-        };
+        let harness_subdir = self.harness_subdir();
         let harness_policies_dir = self.paths.policies.join(harness_subdir);
         info!(
             "Scanning harness-specific policies for: {:?} at {:?}",
@@ -91,54 +52,13 @@ impl Engine {
         );
 
         // Step 1b: Scan system directory at cupcake root for shared system entrypoint
-        let system_dir = self.paths.cupcake_dir.join("system");
-        let system_files = if system_dir.exists() && system_dir.is_dir() {
-            info!("Scanning system directory: {:?}", system_dir);
-            match scanner::scan_policies(&system_dir).await {
-                Ok(files) => files,
-                Err(e) => {
-                    warn!("Failed to scan system directory: {}", e);
-                    Vec::new()
-                }
-            }
-        } else {
-            debug!("No system directory found at {:?}", system_dir);
-            Vec::new()
-        };
-        info!("Found {} system policy files", system_files.len());
+        let system_files = self.scan_system_policy_files().await;
 
         // Step 2: Parse selectors and build policy units from harness policies
-        for path in policy_files {
-            match self.parse_policy(&path).await {
-                Ok(unit) => {
-                    info!(
-                        "Successfully parsed policy: {} from {:?}",
-                        unit.package_name, path
-                    );
-                    self.policies.push(unit);
-                }
-                Err(e) => {
-                    // Fail loudly but don't crash - log and skip bad policies
-                    error!("Failed to parse policy at {:?}: {}", path, e);
-                }
-            }
-        }
+        self.parse_policy_files(policy_files, "policy").await;
 
         // Step 2b: Parse system policies
-        for path in system_files {
-            match self.parse_policy(&path).await {
-                Ok(unit) => {
-                    info!(
-                        "Successfully parsed system policy: {} from {:?}",
-                        unit.package_name, path
-                    );
-                    self.policies.push(unit);
-                }
-                Err(e) => {
-                    error!("Failed to parse system policy at {:?}: {}", path, e);
-                }
-            }
-        }
+        self.parse_policy_files(system_files, "system policy").await;
 
         if self.policies.is_empty() {
             warn!("No valid policies found in directory");
@@ -146,18 +66,7 @@ impl Engine {
         }
 
         // Check for non-system policies (actual user rules, not just infrastructure)
-        // System policies (cupcake.system.*, cupcake.global.system.*) are entrypoints/helpers
-        // that aggregate decisions - they don't contain actual rules themselves.
-        let non_system_count = self
-            .policies
-            .iter()
-            .filter(|p| {
-                !p.package_name.starts_with("cupcake.system")
-                    && !p.package_name.starts_with("cupcake.global.system")
-            })
-            .count();
-
-        if non_system_count == 0 {
+        if !self.has_user_policies() {
             info!(
                 "No user policies found (only system infrastructure) - evaluation will allow all"
             );
@@ -246,12 +155,7 @@ impl Engine {
             .unwrap_or_default();
 
         // Determine harness-specific global policies subdirectory
-        let harness_subdir = match self.config.harness {
-            crate::harness::types::HarnessType::ClaudeCode => "claude",
-            crate::harness::types::HarnessType::Cursor => "cursor",
-            crate::harness::types::HarnessType::Factory => "factory",
-            crate::harness::types::HarnessType::OpenCode => "opencode",
-        };
+        let harness_subdir = self.harness_subdir();
         let harness_global_policies_dir = global_policies_path.join(harness_subdir);
 
         // Scan for global policies in harness-specific directory

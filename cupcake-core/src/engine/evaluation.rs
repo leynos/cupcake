@@ -1,6 +1,8 @@
 //! Event routing and evaluation for the engine.
 
+use super::evaluation_telemetry::{global_stop, record_global_exit, with_current_phase};
 use super::*;
+use crate::telemetry::PolicyPhase;
 
 impl Engine {
     /// Find policies that match the given event criteria
@@ -170,63 +172,20 @@ impl Engine {
             }
 
             // Early termination on global blocking decisions
-            match &global_decision {
-                decision::FinalDecision::Halt { reason, .. } => {
-                    info!("Global policy HALT - immediate termination: {}", reason);
-                    // Record exit reason in telemetry
-                    if let Some(ref mut ctx) = telemetry {
-                        if let Some(phase) = ctx.current_phase_mut() {
-                            phase
-                                .evaluation_mut()
-                                .record_exit(format!("Global halt: {reason}"));
-                            phase.finalize();
-                        }
-                    }
-                    current_span.record("final_decision", "GlobalHalt");
-                    current_span.record("duration_ms", eval_start.elapsed().as_millis());
-                    return Ok(global_decision);
-                }
-                decision::FinalDecision::Deny { reason, .. } => {
-                    info!("Global policy DENY - immediate termination: {}", reason);
-                    // Record exit reason in telemetry
-                    if let Some(ref mut ctx) = telemetry {
-                        if let Some(phase) = ctx.current_phase_mut() {
-                            phase
-                                .evaluation_mut()
-                                .record_exit(format!("Global deny: {reason}"));
-                            phase.finalize();
-                        }
-                    }
-                    current_span.record("final_decision", "GlobalDeny");
-                    current_span.record("duration_ms", eval_start.elapsed().as_millis());
-                    return Ok(global_decision);
-                }
-                decision::FinalDecision::Block { reason, .. } => {
-                    info!("Global policy BLOCK - immediate termination: {}", reason);
-                    // Record exit reason in telemetry
-                    if let Some(ref mut ctx) = telemetry {
-                        if let Some(phase) = ctx.current_phase_mut() {
-                            phase
-                                .evaluation_mut()
-                                .record_exit(format!("Global block: {reason}"));
-                            phase.finalize();
-                        }
-                    }
-                    current_span.record("final_decision", "GlobalBlock");
-                    current_span.record("duration_ms", eval_start.elapsed().as_millis());
-                    return Ok(global_decision);
-                }
-                _ => {
-                    debug!("Global policies did not halt/deny/block - proceeding to project evaluation");
-                    // Finalize global phase before continuing
-                    if let Some(ref mut ctx) = telemetry {
-                        if let Some(phase) = ctx.current_phase_mut() {
-                            phase.finalize();
-                        }
-                    }
-                    // TODO: In the future, preserve Ask/Allow/Context for merging with project decisions
-                }
+            if let Some(stop) = global_stop(&global_decision) {
+                info!(
+                    "Global policy {} - immediate termination: {}",
+                    stop.verb_upper, stop.reason
+                );
+                record_global_exit(&mut telemetry, &stop);
+                current_span.record("final_decision", stop.span_label);
+                current_span.record("duration_ms", eval_start.elapsed().as_millis());
+                return Ok(global_decision);
             }
+            debug!("Global policies did not halt/deny/block - proceeding to project evaluation");
+            // Finalize global phase before continuing
+            with_current_phase(&mut telemetry, PolicyPhase::finalize);
+            // TODO: In the future, preserve Ask/Allow/Context for merging with project decisions
         }
 
         // PHASE 2: Evaluate project policies
@@ -250,28 +209,24 @@ impl Engine {
             .collect();
 
         // Record routing in telemetry
-        if let Some(ref mut ctx) = telemetry {
-            if let Some(phase) = ctx.current_phase_mut() {
-                phase
-                    .evaluation_mut()
-                    .record_routing(!matched_policies.is_empty(), &policy_names);
-            }
-        }
+        with_current_phase(&mut telemetry, |phase| {
+            phase
+                .evaluation_mut()
+                .record_routing(!matched_policies.is_empty(), &policy_names);
+        });
 
         if matched_policies.is_empty() {
             info!("No policies matched for this event - allowing");
             // Record early exit in telemetry
-            if let Some(ref mut ctx) = telemetry {
-                if let Some(phase) = ctx.current_phase_mut() {
-                    phase
-                        .evaluation_mut()
-                        .record_exit("No policies matched - implicit allow");
-                    phase
-                        .evaluation_mut()
-                        .record_final_decision(&decision::FinalDecision::Allow { context: vec![] });
-                    phase.finalize();
-                }
-            }
+            with_current_phase(&mut telemetry, |phase| {
+                phase
+                    .evaluation_mut()
+                    .record_exit("No policies matched - implicit allow");
+                phase
+                    .evaluation_mut()
+                    .record_final_decision(&decision::FinalDecision::Allow { context: vec![] });
+                phase.finalize();
+            });
             current_span.record("matched_policy_count", 0);
             current_span.record("final_decision", "Allow");
             current_span.record("duration_ms", eval_start.elapsed().as_millis());
@@ -297,24 +252,20 @@ impl Engine {
         };
 
         // Record signal executions in telemetry
-        if let Some(ref mut ctx) = telemetry {
-            if let Some(phase) = ctx.current_phase_mut() {
-                for signal in signal_executions {
-                    phase.record_signal(signal);
-                }
+        with_current_phase(&mut telemetry, |phase| {
+            for signal in signal_executions {
+                phase.record_signal(signal);
             }
-        }
+        });
 
         // Step 3: Evaluate using single aggregation entrypoint with enriched input
         debug!("About to evaluate decision set with enriched input");
         let decision_set = self.evaluate_decision_set(&enriched_input).await?;
 
         // Record WASM results in telemetry
-        if let Some(ref mut ctx) = telemetry {
-            if let Some(phase) = ctx.current_phase_mut() {
-                phase.evaluation_mut().record_wasm_result(&decision_set);
-            }
-        }
+        with_current_phase(&mut telemetry, |phase| {
+            phase.evaluation_mut().record_wasm_result(&decision_set);
+        });
 
         // Step 4: Apply Intelligence Layer synthesis
         let final_decision = synthesis::SynthesisEngine::synthesize(&decision_set)?;
@@ -322,14 +273,12 @@ impl Engine {
         info!("Synthesized final decision: {:?}", final_decision);
 
         // Record final decision in telemetry
-        if let Some(ref mut ctx) = telemetry {
-            if let Some(phase) = ctx.current_phase_mut() {
-                phase
-                    .evaluation_mut()
-                    .record_final_decision(&final_decision);
-                phase.finalize();
-            }
-        }
+        with_current_phase(&mut telemetry, |phase| {
+            phase
+                .evaluation_mut()
+                .record_final_decision(&final_decision);
+            phase.finalize();
+        });
 
         // Record final decision type and duration
         let duration = eval_start.elapsed();

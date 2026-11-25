@@ -45,7 +45,9 @@ pub use rulebook::{TelemetryConfig, TelemetryFormat};
 // Engine implementation, split by concern
 mod evaluation;
 mod evaluation_global;
+mod evaluation_telemetry;
 mod init;
+mod init_steps;
 mod routing_build;
 
 /// The main Engine struct - a black box with simple public API
