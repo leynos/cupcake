@@ -238,6 +238,54 @@ mod tests {
         assert_eq!(found, ["__builtin_git_guard", "__builtin_git_guard_status"]);
     }
 
+    fn policy(package_name: &str, required_signals: &[&str]) -> PolicyUnit {
+        PolicyUnit {
+            path: std::path::PathBuf::from("policy.rego"),
+            package_name: package_name.to_string(),
+            routing: crate::engine::metadata::RoutingDirective {
+                required_events: Vec::new(),
+                required_tools: Vec::new(),
+                required_signals: required_signals.iter().map(|s| s.to_string()).collect(),
+            },
+            metadata: None,
+        }
+    }
+
+    #[test]
+    fn collect_required_global_signals_returns_the_deduplicated_union() {
+        let mut rulebook = Rulebook::default();
+        for name in [
+            "declared",
+            "__builtin_git_guard_status",
+            "__builtin_project_rule",
+            "__builtin_unused_status",
+        ] {
+            rulebook.signals.insert(name.to_string(), signal("true"));
+        }
+        let policies = [
+            // Declared signals, one of which the builtin scan also finds.
+            policy(
+                "cupcake.policies.custom",
+                &["declared", "__builtin_git_guard_status"],
+            ),
+            policy("cupcake.global.policies.builtins.git_guard", &[]),
+            policy("cupcake.policies.builtins.project_rule", &[]),
+        ];
+
+        let required = collect_required_global_signals(&policies, &rulebook);
+
+        let mut found: Vec<_> = required.into_iter().collect();
+        found.sort();
+        assert_eq!(
+            found,
+            [
+                "__builtin_git_guard_status",
+                "__builtin_project_rule",
+                "declared"
+            ]
+        );
+    }
+
     #[test]
     fn inject_builtin_config_leaves_non_objects_and_empty_configs_unchanged() {
         let rulebook = Rulebook::default();

@@ -192,7 +192,10 @@ impl Engine {
         self.global_rulebook = Some(
             rulebook::Rulebook::load_with_conventions(
                 global_rulebook_path,
-                self.paths.global_signals.as_ref().unwrap(),
+                self.paths
+                    .global_signals
+                    .as_ref()
+                    .context("Global signals path not set")?,
             )
             .await?,
         );
