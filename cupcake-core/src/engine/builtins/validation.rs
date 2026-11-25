@@ -167,60 +167,67 @@ impl BuiltinsConfig {
 
     /// Get list of enabled builtin names
     pub fn enabled_builtins(&self) -> Vec<String> {
-        let mut enabled = Vec::new();
+        self.builtin_flags()
+            .into_iter()
+            .filter(|&(_, enabled)| enabled)
+            .map(|(name, _)| name.to_string())
+            .collect()
+    }
 
-        if self
-            .claude_code_always_inject_on_prompt
-            .as_ref()
-            .is_some_and(|c| c.enabled)
-        {
-            enabled.push("claude_code_always_inject_on_prompt".to_string());
-        }
-        if self.git_pre_check.as_ref().is_some_and(|c| c.enabled) {
-            enabled.push("git_pre_check".to_string());
-        }
-        if self.post_edit_check.as_ref().is_some_and(|c| c.enabled) {
-            enabled.push("post_edit_check".to_string());
-        }
-        if self
-            .rulebook_security_guardrails
-            .as_ref()
-            .is_some_and(|c| c.enabled)
-        {
-            enabled.push("rulebook_security_guardrails".to_string());
-        }
-        if self.protected_paths.as_ref().is_some_and(|c| c.enabled) {
-            enabled.push("protected_paths".to_string());
-        }
-        if self.git_block_no_verify.as_ref().is_some_and(|c| c.enabled) {
-            enabled.push("git_block_no_verify".to_string());
-        }
-        if self.system_protection.as_ref().is_some_and(|c| c.enabled) {
-            enabled.push("system_protection".to_string());
-        }
-        if self
-            .sensitive_data_protection
-            .as_ref()
-            .is_some_and(|c| c.enabled)
-        {
-            enabled.push("sensitive_data_protection".to_string());
-        }
-        if self
-            .cupcake_exec_protection
-            .as_ref()
-            .is_some_and(|c| c.enabled)
-        {
-            enabled.push("cupcake_exec_protection".to_string());
-        }
-        if self
-            .claude_code_enforce_full_file_read
-            .as_ref()
-            .is_some_and(|c| c.enabled)
-        {
-            enabled.push("claude_code_enforce_full_file_read".to_string());
-        }
-
-        enabled
+    /// Each builtin's name and whether its configuration is present and enabled, in listing order.
+    fn builtin_flags(&self) -> [(&'static str, bool); 10] {
+        [
+            (
+                "claude_code_always_inject_on_prompt",
+                self.claude_code_always_inject_on_prompt
+                    .as_ref()
+                    .is_some_and(|c| c.enabled),
+            ),
+            (
+                "git_pre_check",
+                self.git_pre_check.as_ref().is_some_and(|c| c.enabled),
+            ),
+            (
+                "post_edit_check",
+                self.post_edit_check.as_ref().is_some_and(|c| c.enabled),
+            ),
+            (
+                "rulebook_security_guardrails",
+                self.rulebook_security_guardrails
+                    .as_ref()
+                    .is_some_and(|c| c.enabled),
+            ),
+            (
+                "protected_paths",
+                self.protected_paths.as_ref().is_some_and(|c| c.enabled),
+            ),
+            (
+                "git_block_no_verify",
+                self.git_block_no_verify.as_ref().is_some_and(|c| c.enabled),
+            ),
+            (
+                "system_protection",
+                self.system_protection.as_ref().is_some_and(|c| c.enabled),
+            ),
+            (
+                "sensitive_data_protection",
+                self.sensitive_data_protection
+                    .as_ref()
+                    .is_some_and(|c| c.enabled),
+            ),
+            (
+                "cupcake_exec_protection",
+                self.cupcake_exec_protection
+                    .as_ref()
+                    .is_some_and(|c| c.enabled),
+            ),
+            (
+                "claude_code_enforce_full_file_read",
+                self.claude_code_enforce_full_file_read
+                    .as_ref()
+                    .is_some_and(|c| c.enabled),
+            ),
+        ]
     }
 }
 

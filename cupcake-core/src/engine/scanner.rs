@@ -58,23 +58,26 @@ fn scan_directory_recursive_filtered<'a>(
                 debug!("Scanning subdirectory: {:?}", path);
                 scan_directory_recursive_filtered(&path, files, enabled_builtins).await?;
             } else if path.is_file() {
-                // Check if it's a .rego file
-                if let Some(extension) = path.extension() {
-                    if extension == "rego" {
-                        // Check if this is a builtin policy that should be filtered
-                        if should_include_policy(&path, enabled_builtins) {
-                            debug!("Found policy file: {:?}", path);
-                            files.push(path);
-                        } else {
-                            debug!("Skipping disabled builtin policy: {:?}", path);
-                        }
-                    }
-                }
+                collect_rego_file(path, files, enabled_builtins);
             }
         }
 
         Ok(())
     })
+}
+
+/// Add `path` to `files` when it is a `.rego` file that builtin filtering lets through.
+fn collect_rego_file(path: PathBuf, files: &mut Vec<PathBuf>, enabled_builtins: &[String]) {
+    if path.extension().is_none_or(|extension| extension != "rego") {
+        return;
+    }
+    // Check if this is a builtin policy that should be filtered
+    if should_include_policy(&path, enabled_builtins) {
+        debug!("Found policy file: {:?}", path);
+        files.push(path);
+    } else {
+        debug!("Skipping disabled builtin policy: {:?}", path);
+    }
 }
 
 /// Check if a policy should be included based on builtin filtering
@@ -176,5 +179,33 @@ mod tests {
 
         let files = scan_policies(temp_dir.path()).await.unwrap();
         assert_eq!(files.len(), 2);
+    }
+
+    #[test]
+    fn collect_rego_file_keeps_enabled_policies_and_skips_other_files() {
+        let enabled = vec!["git_pre_check".to_string()];
+        let mut files = Vec::new();
+
+        collect_rego_file(PathBuf::from("policies/custom.rego"), &mut files, &enabled);
+        collect_rego_file(PathBuf::from("policies/notes.md"), &mut files, &enabled);
+        collect_rego_file(PathBuf::from("policies/no_extension"), &mut files, &enabled);
+        collect_rego_file(
+            PathBuf::from("policies/builtins/git_pre_check.rego"),
+            &mut files,
+            &enabled,
+        );
+        collect_rego_file(
+            PathBuf::from("policies/builtins/protected_paths.rego"),
+            &mut files,
+            &enabled,
+        );
+
+        assert_eq!(
+            files,
+            [
+                PathBuf::from("policies/custom.rego"),
+                PathBuf::from("policies/builtins/git_pre_check.rego"),
+            ]
+        );
     }
 }

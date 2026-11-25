@@ -137,23 +137,7 @@ impl Rulebook {
             );
 
             let builtin_signals = rulebook.builtins.generate_signals();
-
-            // Merge builtin-generated signals (don't override user-defined)
-            for (name, signal) in builtin_signals {
-                use std::collections::hash_map::Entry;
-                match rulebook.signals.entry(name) {
-                    Entry::Vacant(e) => {
-                        debug!("Adding builtin-generated signal: {}", e.key());
-                        e.insert(signal);
-                    }
-                    Entry::Occupied(e) => {
-                        debug!(
-                            "Keeping user-defined signal: {} (skipping builtin)",
-                            e.key()
-                        );
-                    }
-                }
-            }
+            rulebook.merge_builtin_signals(builtin_signals);
         }
 
         info!(
@@ -396,3 +380,7 @@ impl Rulebook {
         Ok(signal_data)
     }
 }
+
+mod merge;
+#[cfg(test)]
+mod tests;

@@ -18,7 +18,22 @@ pub(super) fn resolve_and_attach_symlinks(input: &mut Value, harness: HarnessTyp
         .and_then(|v| v.as_str())
         .map(std::path::PathBuf::from);
 
-    // Extract file path based on tool and harness type
+    // Process single file path if present
+    if let Some(path_str_owned) = extract_file_path(input, harness) {
+        resolve_and_attach_single_path(input, &path_str_owned, cwd.as_deref());
+        applied = true;
+    }
+
+    // Special handling for MultiEdit tool (Claude Code only)
+    if harness == HarnessType::ClaudeCode && resolve_multi_edit_paths(input, cwd.as_deref()) {
+        applied = true;
+    }
+
+    applied
+}
+
+/// Find the file path string the tool call operates on, by harness-specific event shape.
+fn extract_file_path(input: &Value, harness: HarnessType) -> Option<String> {
     let file_path_opt = match harness {
         HarnessType::ClaudeCode | HarnessType::Factory => {
             // Claude Code and Factory AI structure: input.tool_input.<field>
@@ -47,51 +62,49 @@ pub(super) fn resolve_and_attach_symlinks(input: &mut Value, harness: HarnessTyp
         }
     };
 
-    // Process single file path if present
-    if let Some(path_value) = file_path_opt {
-        if let Some(path_str) = path_value.as_str() {
-            let path_str_owned = path_str.to_string();
-            resolve_and_attach_single_path(input, &path_str_owned, cwd.as_deref());
+    file_path_opt
+        .and_then(|path_value| path_value.as_str())
+        .map(str::to_string)
+}
+
+/// Canonicalize each MultiEdit edit's `file_path`; returns true if any edit was processed.
+fn resolve_multi_edit_paths(input: &mut Value, cwd: Option<&std::path::Path>) -> bool {
+    // First, collect all the file paths to avoid borrow checker issues
+    let edit_paths: Vec<String> = input
+        .get("tool_input")
+        .and_then(|ti| ti.get("edits"))
+        .and_then(|e| e.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|edit| {
+                    edit.get("file_path")
+                        .and_then(|fp| fp.as_str())
+                        .map(|s| s.to_string())
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Now process each edit with mutable access
+    if edit_paths.is_empty() {
+        return false;
+    }
+    let Some(edits_array) = input
+        .get_mut("tool_input")
+        .and_then(|tool_input| tool_input.get_mut("edits"))
+        .and_then(|edits| edits.as_array_mut())
+    else {
+        return false;
+    };
+
+    let mut applied = false;
+    for (i, edit) in edits_array.iter_mut().enumerate() {
+        if let Some(path_str) = edit_paths.get(i) {
+            trace!("Canonicalizing MultiEdit file_path: {}", path_str);
+            resolve_and_attach_single_path(edit, path_str, cwd);
             applied = true;
         }
     }
-
-    // Special handling for MultiEdit tool (Claude Code only)
-    if harness == HarnessType::ClaudeCode {
-        // First, collect all the file paths to avoid borrow checker issues
-        let edit_paths: Vec<String> = input
-            .get("tool_input")
-            .and_then(|ti| ti.get("edits"))
-            .and_then(|e| e.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|edit| {
-                        edit.get("file_path")
-                            .and_then(|fp| fp.as_str())
-                            .map(|s| s.to_string())
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        // Now process each edit with mutable access
-        if !edit_paths.is_empty() {
-            if let Some(tool_input) = input.get_mut("tool_input") {
-                if let Some(edits) = tool_input.get_mut("edits") {
-                    if let Some(edits_array) = edits.as_array_mut() {
-                        for (i, edit) in edits_array.iter_mut().enumerate() {
-                            if let Some(path_str) = edit_paths.get(i) {
-                                trace!("Canonicalizing MultiEdit file_path: {}", path_str);
-                                resolve_and_attach_single_path(edit, path_str, cwd.as_deref());
-                                applied = true;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     applied
 }
 
