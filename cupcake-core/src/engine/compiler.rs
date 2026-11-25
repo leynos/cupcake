@@ -364,37 +364,4 @@ async fn extract_wasm_from_bundle(bundle_path: &Path) -> Result<Vec<u8>> {
 }
 
 #[cfg(test)]
-mod tests {
-    //! Tests for the policy-root discovery helper.
-
-    use super::*;
-
-    fn unit(path: &str) -> PolicyUnit {
-        PolicyUnit {
-            path: PathBuf::from(path),
-            package_name: "p".to_string(),
-            routing: Default::default(),
-            metadata: None,
-        }
-    }
-
-    #[test]
-    fn root_is_the_policies_directory_above_the_first_policy() {
-        let policies = [unit("/proj/.cupcake/policies/claude/sub/a.rego")];
-        let root = find_policies_root(&policies).expect("root");
-        assert_eq!(root, Path::new("/proj/.cupcake/policies"));
-    }
-
-    #[test]
-    fn root_falls_back_to_the_first_policys_parent() {
-        let policies = [unit("/proj/rules/a.rego")];
-        let root = find_policies_root(&policies).expect("root");
-        assert_eq!(root, Path::new("/proj/rules"));
-    }
-
-    #[test]
-    fn no_policies_is_an_error() {
-        let error = find_policies_root(&[]).expect_err("no root");
-        assert!(error.to_string().contains("No policies"));
-    }
-}
+mod tests;
