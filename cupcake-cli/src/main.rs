@@ -1688,8 +1688,8 @@ fn policy_table_row(policy: &serde_json::Value) -> PolicyTableRow {
         .and_then(|v| v.as_str())
         .unwrap_or("-");
 
-    let title_truncated = if title.len() > 40 {
-        format!("{}...", &title[..37])
+    let title_truncated = if title.chars().count() > 40 {
+        format!("{}...", title.chars().take(37).collect::<String>())
     } else {
         title.to_string()
     };
