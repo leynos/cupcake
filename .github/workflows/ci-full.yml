@@ -60,6 +60,13 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Setup Python
+        # `cargo test --workspace` builds cupcake-py, and PyO3 0.23 supports
+        # Python up to 3.13, so pin the interpreter it finds.
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Install OPA (Unix)
         if: runner.os != 'Windows'
         run: |
