@@ -85,7 +85,7 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
   whitaker:
     name: Whitaker
@@ -156,13 +156,13 @@ jobs:
 
       - name: Run unit tests
         run: |
-          cargo test --lib --bins
+          cargo test --workspace --lib --bins
         env:
           CI: true
 
       - name: Run doc-tests
         run: |
-          cargo test --doc -j 1 -- --test-threads=1
+          cargo test --workspace --doc -j 1 -- --test-threads=1
         env:
           CI: true
 

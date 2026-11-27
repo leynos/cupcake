@@ -133,7 +133,7 @@ jobs:
 
       - name: Run unit and integration tests
         run: |
-          cargo test --lib --bins --tests
+          cargo test --workspace --lib --bins --tests
         env:
           CI: true
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -142,14 +142,14 @@ jobs:
       - name: Run doc-tests (serial to avoid linker memory issues)
         if: runner.os == 'Linux'
         run: |
-          cargo test --doc -j 1 -- --test-threads=1
+          cargo test --workspace --doc -j 1 -- --test-threads=1
         env:
           CI: true
 
       - name: Run doc-tests (macOS/Windows)
         if: runner.os != 'Linux'
         run: |
-          cargo test --doc
+          cargo test --workspace --doc
         env:
           CI: true
 
@@ -170,7 +170,7 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
   nix:
     name: Nix Build
